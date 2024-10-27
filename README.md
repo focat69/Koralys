@@ -5,7 +5,8 @@
 <h1 align="center">Koralys Disassembler & Decompiler</h1>
 
 This project is a result of countless hours of hard work and development. We ask that you do not claim this project as your own, and give credit where it is due.  
-Join the Discord server: https://discord.gg/Thx7KGyM2Q
+
+> Join our [Discord Server](https://discord.gg/Thx7KGyM2Q) for updates, support, and more!
 
 > **Note:** This project is licensed under the GNU General Public License v3.0.
 
