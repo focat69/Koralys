@@ -4,6 +4,8 @@ This project is a result of countless hours of hard work and development. We ask
 
 > **Note:** This project is licensed under the GNU General Public License v3.0.
 
+I've included an example v5 bytecode file that you can use for testing this project out.
+
 ## Written by:
 - **focat**
   - Discord: @focat (676960182621962271)
