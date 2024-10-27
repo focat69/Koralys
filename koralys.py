@@ -135,19 +135,19 @@ class Reader:
 
 # TODO: fix sourcery code quality issues (currently 12%)
 def deserialize_v5(reader: Reader) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
-    typesversion = reader.nextByte()
-    if typesversion not in [1, 2, 3]:
-        raise ValueError(f"Invalid types version (types version: {typesversion})")
+    types_version = reader.nextByte()
+    if types_version not in [1, 2, 3]:
+        raise ValueError(f"Invalid types version (types version: {types_version})")
 
-    LUAUVERSION = f"Luau Version 5, Types Version {typesversion}"
+    luau_version = f"Luau Version 5, Types Version {types_version}"
 
-    protoTable: List[Dict[str, Any]] = []
-    stringTable: List[str] = []
+    proto_table: List[Dict[str, Any]] = []
+    string_table: List[str] = []
 
-    sizeStrings = reader.nextVarInt()
-    stringTable.extend(reader.nextString() for _ in range(sizeStrings))
-    sizeProtos = reader.nextVarInt()
-    protoTable.extend(
+    size_strings = reader.nextVarInt()
+    string_table.extend(reader.nextString() for _ in range(size_strings))
+    size_protos = reader.nextVarInt()
+    proto_table.extend(
         {
             'codeTable': [],
             'kTable': [],
@@ -155,10 +155,10 @@ def deserialize_v5(reader: Reader) -> Tuple[Dict[str, Any], List[Dict[str, Any]]
             'smallLineInfo': [],
             'largeLineInfo': [],
         }
-        for _ in range(sizeProtos)
+        for _ in range(size_protos)
     )
-    for i in range(sizeProtos):
-        proto = protoTable[i]
+    for i in range(size_protos):
+        proto = proto_table[i]
         proto['maxStackSize'] = reader.nextByte()
         proto['numParams'] = reader.nextByte()
         proto['numUpValues'] = reader.nextByte()
@@ -182,8 +182,8 @@ def deserialize_v5(reader: Reader) -> Tuple[Dict[str, Any], List[Dict[str, Any]]
             elif k['type'] == LBC_CONSTANT_STRING:
                 index = reader.nextVarInt()
                 adjusted_index = index - 1
-                if 0 <= adjusted_index < len(stringTable):
-                    k['value'] = stringTable[adjusted_index]
+                if 0 <= adjusted_index < len(string_table):
+                    k['value'] = string_table[adjusted_index]
                 else:
                     k['value'] = "Invalid string index"
             elif k['type'] == LBC_CONSTANT_IMPORT:
@@ -202,14 +202,14 @@ def deserialize_v5(reader: Reader) -> Tuple[Dict[str, Any], List[Dict[str, Any]]
 
         proto['sizeProtos'] = reader.nextVarInt()
         for _ in range(proto['sizeProtos']):
-            proto['pTable'].append(protoTable[reader.nextVarInt()])
+            proto['pTable'].append(proto_table[reader.nextVarInt()])
 
         proto['lineDefined'] = reader.nextVarInt()
 
         protoSourceId = reader.nextVarInt()
-        if protoSourceId >= len(stringTable):
-            raise IndexError(f"Index {protoSourceId} out of range for stringTable with length {len(stringTable)}")
-        proto['source'] = stringTable[protoSourceId]
+        if protoSourceId >= len(string_table):
+            raise IndexError(f"Index {protoSourceId} out of range for stringTable with length {len(string_table)}")
+        proto['source'] = string_table[protoSourceId]
 
         if reader.nextByte() == 1:  # has line info?
             compKey = reader.nextByte()
@@ -226,11 +226,11 @@ def deserialize_v5(reader: Reader) -> Tuple[Dict[str, Any], List[Dict[str, Any]]
             raise ValueError("only ROBLOX scripts can be disassembled")
 
     mainProtoId = reader.nextVarInt()
-    if mainProtoId >= len(protoTable):
-        raise IndexError(f"Index {mainProtoId} out of range for protoTable with length {len(protoTable)}")
-    return protoTable[mainProtoId], protoTable, stringTable, LUAUVERSION
+    if mainProtoId >= len(proto_table):
+        raise IndexError(f"Index {mainProtoId} out of range for protoTable with length {len(proto_table)}")
+    return proto_table[mainProtoId], proto_table, string_table, luau_version
 
-def parse_proto(reader: Reader, stringTable: List[str], typesversion: int) -> Dict[str, Any]:
+def parse_proto(reader: Reader, string_table: List[str], types_version: int) -> Dict[str, Any]:
     proto: Dict[str, Any] = {
         'maxStackSize': reader.nextByte(),
         'numParams': reader.nextByte(),
@@ -246,42 +246,42 @@ def parse_proto(reader: Reader, stringTable: List[str], typesversion: int) -> Di
         'source': "",
     }
 
-    typesize = reader.nextVarInt()
-    proto['typeInfo'] = [reader.nextByte() for _ in range(typesize)]
+    type_size = reader.nextVarInt()
+    proto['typeInfo'] = [reader.nextByte() for _ in range(type_size)]
 
-    sizeCode = reader.nextVarInt()
-    debug(f"  Code size: {sizeCode}")
-    proto['codeTable'] = [reader.nextUint32() for _ in range(sizeCode)]
-    proto['sizeCode'] = sizeCode
+    size_code = reader.nextVarInt()
+    debug(f"  Code size: {size_code}")
+    proto['codeTable'] = [reader.nextUint32() for _ in range(size_code)]
+    proto['sizeCode'] = size_code
 
-    sizeConsts = reader.nextVarInt()
-    debug(f"  Number of constants: {sizeConsts}")
-    proto['kTable'] = [parse_constant(reader, stringTable) for _ in range(sizeConsts)]
+    size_consts = reader.nextVarInt()
+    debug(f"  Number of constants: {size_consts}")
+    proto['kTable'] = [parse_constant(reader, string_table) for _ in range(size_consts)]
 
-    sizeProtos = reader.nextVarInt()
-    debug(f"  Number of child protos: {sizeProtos}")
-    proto['pTable'] = [reader.nextVarInt() for _ in range(sizeProtos)]
-    proto['numChildren'] = sizeProtos
+    size_protos = reader.nextVarInt()
+    debug(f"  Number of child protos: {size_protos}")
+    proto['pTable'] = [reader.nextVarInt() for _ in range(size_protos)]
+    proto['numChildren'] = size_protos
 
     proto['lineDefined'] = reader.nextVarInt()
 
-    protoSourceId = reader.nextVarInt()
-    if 0 <= protoSourceId - 1 < len(stringTable):
-        proto['source'] = stringTable[protoSourceId - 1]
+    proto_source_id = reader.nextVarInt()
+    if 0 <= proto_source_id - 1 < len(string_table):
+        proto['source'] = string_table[proto_source_id - 1]
     else:
-        proto['source'] = f"Invalid source index: {protoSourceId}"
+        proto['source'] = f"Invalid source index: {proto_source_id}"
 
     if reader.nextByte() == 1:  # has line info?
         debug("  Proto has line info")
-        proto['lineInfo'] = parse_line_info(reader, sizeCode)
+        proto['lineInfo'] = parse_line_info(reader, size_code)
 
     if reader.nextByte() == 1:  # has debug info?
         debug("  Proto has debug info")
-        proto['debugInfo'] = parse_debug_info(reader, stringTable)
+        proto['debugInfo'] = parse_debug_info(reader, string_table)
 
     return proto
 
-def parse_constant(reader: Reader, stringTable: List[str]) -> Dict[str, Any]:
+def parse_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
     try:
         k = {'type': reader.nextByte()}
         if k['type'] == LBC_CONSTANT_NIL:
@@ -293,8 +293,8 @@ def parse_constant(reader: Reader, stringTable: List[str]) -> Dict[str, Any]:
         elif k['type'] == LBC_CONSTANT_STRING:
             index = reader.nextVarInt()
             adjusted_index = index - 1
-            if 0 <= adjusted_index < len(stringTable):
-                k['value'] = stringTable[adjusted_index]
+            if 0 <= adjusted_index < len(string_table):
+                k['value'] = string_table[adjusted_index]
             else:
                 k['value'] = f"Invalid string index: {index}"
         elif k['type'] == LBC_CONSTANT_IMPORT:
@@ -314,32 +314,32 @@ def parse_constant(reader: Reader, stringTable: List[str]) -> Dict[str, Any]:
         k['value'] = f"Error reading constant: {str(e)}"
     return k
 
-def parse_line_info(reader: Reader, sizeCode: int) -> Dict[str, Any]:
+def parse_line_info(reader: Reader, size_code: int) -> Dict[str, Any]:
     lineInfo = {'compKey': reader.nextByte(), 'intervals': []}
-    lineInfo['intervals'] = [reader.nextByte() for _ in range(sizeCode)]
+    lineInfo['intervals'] = [reader.nextByte() for _ in range(size_code)]
 
-    _ = (sizeCode + 3) & -4
-    largeIntervals = ((sizeCode - 1) >> lineInfo['compKey']) + 1
+    _ = (size_code + 3) & -4
+    largeIntervals = ((size_code - 1) >> lineInfo['compKey']) + 1
 
     lineInfo['intervals'].extend([reader.nextUint32() for _ in range(largeIntervals)])
     return lineInfo
 
-def parse_debug_info(reader: Reader, stringTable: List[str]) -> Dict[str, Any]:
-    debugInfo = {
+def parse_debug_info(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
+    debug_info = {
         'varInfo': [],
         'upvalueInfo': [],
     }
     sizeVars = reader.nextVarInt()
     for _ in range(sizeVars):
-        debugInfo['varInfo'].append({
-            'name': stringTable[reader.nextVarInt() - 1],
+        debug_info['varInfo'].append({
+            'name': string_table[reader.nextVarInt() - 1],
             'startpc': reader.nextVarInt(),
             'endpc': reader.nextVarInt(),
             'reg': reader.nextByte(),
         })
     sizeUpvalues = reader.nextVarInt()
-    debugInfo['upvalueInfo'] = [stringTable[reader.nextVarInt() - 1] for _ in range(sizeUpvalues)]
-    return debugInfo
+    debug_info['upvalueInfo'] = [string_table[reader.nextVarInt() - 1] for _ in range(sizeUpvalues)]
+    return debug_info
 
 def deserialize(bytecode: bytes) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str], str]:
     reader = Reader(bytecode)
@@ -459,7 +459,7 @@ def GETARG_sBx(i: int) -> int:
 def GETARG_sAx(i: int) -> int:
     return i >> 8
 
-def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]], stringTable: List[str], LUAUVERSION: str) -> str:
+def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, Any]], string_table: List[str], luau_version: str) -> str:
     output = ""
     
     def addTabSpace(depth):
@@ -472,7 +472,7 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
     opcodeToOpname = {info['number']: info['name'] for info in luauOpTable}
     max_opname_length = max(len(info['name']) for info in luauOpTable)
     
-    def getOpcode(opname: str) -> int:
+    def get_opcode(opname: str) -> int:
         opcode = opnameToOpcode.get(opname)
         if opcode is None:
             raise ValueError(f"Unknown opname {opname}")
@@ -515,13 +515,13 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
         elif opname == "MOVE":
             output += f"R{A} = R{B}"
         elif opname == "GETGLOBAL":
-            if aux is not None and aux < len(stringTable):
-                output += f"R{A} = _G[{repr(stringTable[aux])}]"
+            if aux is not None and aux < len(string_table):
+                output += f"R{A} = _G[{repr(string_table[aux])}]"
             else:
                 output += f"R{A} = _G[Invalid string index]"
         elif opname == "SETGLOBAL":
-            if aux is not None and aux < len(stringTable):
-                output += f"_G[{repr(stringTable[aux])}] = R{A}"
+            if aux is not None and aux < len(string_table):
+                output += f"_G[{repr(string_table[aux])}] = R{A}"
             else:
                 output += f"_G[Invalid string index] = R{A}"
         elif opname == "GETUPVAL":
@@ -537,13 +537,13 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
         elif opname == "SETTABLE":
             output += f"R{B}[R{C}] = R{A}"
         elif opname == "GETTABLEKS":
-            if aux is not None and aux < len(stringTable):
-                output += f"R{A} = R{B}[{repr(stringTable[aux])}]"
+            if aux is not None and aux < len(string_table):
+                output += f"R{A} = R{B}[{repr(string_table[aux])}]"
             else:
                 output += f"R{A} = R{B}[Invalid string index]"
         elif opname == "SETTABLEKS":
-            if aux is not None and aux < len(stringTable):
-                output += f"R{B}[{repr(stringTable[aux])}] = R{A}"
+            if aux is not None and aux < len(string_table):
+                output += f"R{B}[{repr(string_table[aux])}] = R{A}"
             else:
                 output += f"R{B}[Invalid string index] = R{A}"
         elif opname == "GETTABLEN":
@@ -553,8 +553,8 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
         elif opname == "NEWCLOSURE":
             output += f"R{A} = closure(proto[{Bx}])"
         elif opname == "NAMECALL":
-            if aux is not None and aux < len(stringTable):
-                output += f"R{A} = R{B}[{repr(stringTable[aux])}]; R{A+1} = R{B}"
+            if aux is not None and aux < len(string_table):
+                output += f"R{A} = R{B}[{repr(string_table[aux])}]; R{A+1} = R{B}"
             else:
                 output += f"R{A} = R{B}[Invalid string index]; R{A+1} = R{B}"
         elif opname == "CALL":
@@ -673,8 +673,8 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
         elif opname == "JUMPXEQKN":
             output += f"if R{A} == {aux} then goto [{(codeIndex + 2 + sAx) & 0xFF}]"
         elif opname == "JUMPXEQKS":
-            if aux is not None and aux < len(stringTable):
-                output += f"if R{A} == '{stringTable[aux]}' then goto [{(codeIndex + 2 + sAx) & 0xFF}]"
+            if aux is not None and aux < len(string_table):
+                output += f"if R{A} == '{string_table[aux]}' then goto [{(codeIndex + 2 + sAx) & 0xFF}]"
             else:
                 output += f"if R{A} == Invalid string index then goto [{(codeIndex + 2 + sAx) & 0xFF}]"
         elif opname == "NOP":
@@ -692,8 +692,8 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
         elif opname == "NEWCLOSURE":
             output += f"R{A} = function(proto[{Bx}])"
         elif opname == "NAMECALL":
-            if aux is not None and aux < len(stringTable):
-                output += f"R{A+1} = R{B}; R{A} = R{B}['{stringTable[aux]}']"
+            if aux is not None and aux < len(string_table):
+                output += f"R{A+1} = R{B}; R{A} = R{B}['{string_table[aux]}']"
             else:
                 output += f"R{A+1} = R{B}; R{A} = R{B}[Invalid string index]"
         elif opname == "CALL":
@@ -738,7 +738,7 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
     if 'sizeProtos' in proto and proto['sizeProtos'] > 0:  
         output += "--< Protos >--\n"
         for i, p in enumerate(proto['pTable']):  
-            output += f"{addTabSpace(depth)}[{i}] = {readProto(protoTable[p], depth + 1, protoTable, stringTable, LUAUVERSION)}\n"
+            output += f"{addTabSpace(depth)}[{i}] = {read_proto(proto_table[p], depth + 1, proto_table, string_table, luau_version)}\n"
     
     # upvalues
     if proto['numUpValues'] > 0:  
@@ -766,7 +766,7 @@ def disassemble(bytecode: bytes) -> Tuple[List[str], List[str], int, str]:
         output.extend(
             (
                 f"--< Proto->{i:03} | Line {proto.get('lineDefined', 0)} >--",
-                readProto(proto, 1, protoTable, stringTable, LUAUVERSION),
+                read_proto(proto, 1, protoTable, stringTable, LUAUVERSION),
             )
         )
         decompiled_output.extend(
