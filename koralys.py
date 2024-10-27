@@ -72,11 +72,9 @@ class Reader:
         return chr(self.nextByte())
 
     def nextUint32(self) -> int:
-        if not self.canRead(4):
-            raise IndexError(f"Attempted to read 4 bytes at position {self.pos}, but bytecode length is {len(self.bytecode)}")
-        value = struct.unpack('<I', self.bytecode[self.pos:self.pos+4])[0]
-        self.pos += 4
-        return value
+        return self.unpackStruct(
+            4, 'Attempted to read 4 bytes at position ', '<I'
+        )
     
     def nextInt(self) -> int:
         b = [self.nextByte() for _ in range(4)]
@@ -104,17 +102,23 @@ class Reader:
         return result
 
     def nextFloat(self) -> float:
-        if not self.canRead(4):
-            raise IndexError(f"Attempted to read float at position {self.pos}, but bytecode length is {len(self.bytecode)}")
-        value = struct.unpack('<f', self.bytecode[self.pos:self.pos+4])[0]
-        self.pos += 4
-        return value
+        return self.unpackStruct(
+            4, 'Attempted to read float at position ', '<f'
+        )
 
     def nextDouble(self) -> float:
-        if not self.canRead(8):
-            raise IndexError(f"Attempted to read double at position {self.pos}, but bytecode length is {len(self.bytecode)}")
-        value = struct.unpack('<d', self.bytecode[self.pos:self.pos+8])[0]
-        self.pos += 8
+        return self.unpackStruct(
+            8, 'Attempted to read double at position ', '<d'
+        )
+
+    # TODO Rename this here and in `nextUint32`, `nextFloat` and `nextDouble`
+    def unpackStruct(self, n, arg1, format):
+        if not self.canRead(n):
+            raise IndexError(
+                f"{arg1}{self.pos}, but bytecode length is {len(self.bytecode)}"
+            )
+        value = struct.unpack(format, self.bytecode[self.pos:self.pos + n])[0]
+        self.pos += n
         return value
 
     def skip(self, n: int) -> None:
@@ -131,28 +135,27 @@ class Reader:
     
 def deserialize_v5(reader: Reader) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
     typesversion = reader.nextByte()
-    if typesversion != 1 and typesversion != 2 and typesversion != 3:
+    if typesversion not in [1, 2, 3]:
         raise ValueError(f"Invalid types version (types version: {typesversion})")
-    
+
     LUAUVERSION = f"Luau Version 5, Types Version {typesversion}"
 
     protoTable: List[Dict[str, Any]] = []
     stringTable: List[str] = []
 
     sizeStrings = reader.nextVarInt()
-    for _ in range(sizeStrings):
-        stringTable.append(reader.nextString())
-
+    stringTable.extend(reader.nextString() for _ in range(sizeStrings))
     sizeProtos = reader.nextVarInt()
-    for _ in range(sizeProtos):
-        protoTable.append({
+    protoTable.extend(
+        {
             'codeTable': [],
             'kTable': [],
             'pTable': [],
             'smallLineInfo': [],
-            'largeLineInfo': []
-        })
-
+            'largeLineInfo': [],
+        }
+        for _ in range(sizeProtos)
+    )
     for i in range(sizeProtos):
         proto = protoTable[i]
         proto['maxStackSize'] = reader.nextByte()
@@ -489,10 +492,9 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
         output += f"{addTabSpace(depth)}[{codeIndex:03}] {opname:<{max_opname_length}} "
         
         aux = None
-        if any(info['name'] == opname and info.get('aux', False) for info in luauOpTable):
-            if codeIndex + 1 < len(proto['codeTable']):
-                aux = proto['codeTable'][codeIndex + 1]
-                codeIndex += 1
+        if any(info['name'] == opname and info.get('aux', False) for info in luauOpTable) and codeIndex + 1 < len(proto['codeTable']):
+            aux = proto['codeTable'][codeIndex + 1]
+            codeIndex += 1
         
         if opname == "LOADNIL":
             output += f"R{A} = nil"
@@ -749,7 +751,7 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
 def disassemble(bytecode: bytes) -> Tuple[List[str], List[str], int, str]:
     output = []
     decompiled_output = []
-    
+
     if bytecode[0] == 0:
         return [bytecode[1:].decode('utf-8')], [], 0, "Luau Version Unknown"
 
@@ -760,11 +762,18 @@ def disassemble(bytecode: bytes) -> Tuple[List[str], List[str], int, str]:
 
     protos = 0
     for i, proto in enumerate(protoTable):
-        output.append(f"--< Proto->{i:03} | Line {proto.get('lineDefined', 0)} >--")
-        output.append(readProto(proto, 1, protoTable, stringTable, LUAUVERSION))
-
-        decompiled_output.append(f"-- Decompiled Proto->{i:03} --")
-        decompiled_output.append(decompile(proto, 1, stringTable))
+        output.extend(
+            (
+                f"--< Proto->{i:03} | Line {proto.get('lineDefined', 0)} >--",
+                readProto(proto, 1, protoTable, stringTable, LUAUVERSION),
+            )
+        )
+        decompiled_output.extend(
+            (
+                f"-- Decompiled Proto->{i:03} --",
+                decompile(proto, 1, stringTable),
+            )
+        )
         protos += 1
 
     return output, decompiled_output, protos, LUAUVERSION
