@@ -33,13 +33,14 @@ Please contribute and fix these bugs and more that you may find.
 (except v6 support we got dat)
 """
 
-DEBUG = False #! Will slow down the decompilation process significantly
-debug = lambda *args, **kwargs: print(*args, **kwargs) if DEBUG else None
-
 import sys
 import time
 import struct
 from typing import List, Dict, Tuple, Any
+
+DEBUG = False #! Will slow down the decompilation process significantly
+def debug(*args, **kwargs):
+    return print(*args, **kwargs) if DEBUG else None
 
 # < CONSTANT TYPES > #
 LBC_CONSTANT_NIL = 0
@@ -211,7 +212,7 @@ def deserialize_v5(reader: Reader) -> Tuple[Dict[str, Any], List[Dict[str, Any]]
             for _ in range(proto['sizeCode']):
                 proto['smallLineInfo'].append(reader.nextByte())
 
-            n = (proto['sizeCode'] + 3) & -4
+            _ = (proto['sizeCode'] + 3) & -4
             intervals = ((proto['sizeCode'] - 1) >> compKey) + 1
 
             for _ in range(intervals):
@@ -313,7 +314,7 @@ def parse_line_info(reader: Reader, sizeCode: int) -> Dict[str, Any]:
     lineInfo = {'compKey': reader.nextByte(), 'intervals': []}
     lineInfo['intervals'] = [reader.nextByte() for _ in range(sizeCode)]
 
-    n = (sizeCode + 3) & -4
+    _ = (sizeCode + 3) & -4
     largeIntervals = ((sizeCode - 1) >> lineInfo['compKey']) + 1
 
     lineInfo['intervals'].extend([reader.nextUint32() for _ in range(largeIntervals)])
@@ -561,7 +562,7 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
             if B == 0:
                 output += f"return R{A} ..."
             elif B == 1:
-                output += f"return"
+                output += "return"
             else:
                 output += f"return R{A} ... R{A+B-2}"
         elif opname == "JUMP":
@@ -647,7 +648,7 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
         elif opname == "FASTCALL":
             output += f"R{A} = builtin[{C}]"
         elif opname == "COVERAGE":
-            output += f"(coverage)"
+            output += "(coverage)"
         elif opname == "CAPTURE":
             capture_types = ["VAL", "REF", "UPVAL"]
             capture_type = capture_types[A] if A < len(capture_types) else f"Unknown({A})"
@@ -709,10 +710,10 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
         output += "\n"
         codeIndex += 1
     
-    output += f"end\n"
+    output += "end\n"
     
     if len(proto['kTable']) > 0: 
-        output += f"--< Constants >--\n"
+        output += "--< Constants >--\n"
         for i, k in enumerate(proto['kTable']):
             if k['type'] == LBC_CONSTANT_NIL:  # nil
                 output += f"{addTabSpace(depth)}[{i}] = nil\n"
@@ -732,13 +733,13 @@ def readProto(proto: Dict[str, Any], depth: int, protoTable: List[Dict[str, Any]
     
     # protos
     if 'sizeProtos' in proto and proto['sizeProtos'] > 0:  
-        output += f"--< Protos >--\n"
+        output += "--< Protos >--\n"
         for i, p in enumerate(proto['pTable']):  
             output += f"{addTabSpace(depth)}[{i}] = {readProto(protoTable[p], depth + 1, protoTable, stringTable, LUAUVERSION)}\n"
     
     # upvalues
     if proto['numUpValues'] > 0:  
-        output += f"--< Upvalues >--\n"
+        output += "--< Upvalues >--\n"
         for i in range(proto['numUpValues']):
             output += f"{addTabSpace(depth)}[{i}] = Upvalue {i}\n"
     
@@ -1068,7 +1069,7 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
         except Exception as e:
             output.append(f"{add_tab_space(depth + 1)}Error processing opcode: {str(e)}")
     
-    output.append(f"end")
+    output.append("end")
     return "\n".join(output)
 
 if __name__ == "__main__":
@@ -1085,7 +1086,7 @@ if __name__ == "__main__":
     
     if DEBUG:
         print("\n".join(disassembled))
-    disassembled_extra = f"--<@ Disassembled with Koralys' BETA disassembler @>--\n"
+    disassembled_extra = "--<@ Disassembled with Koralys' BETA disassembler @>--\n"
     disassembled_extra += f"--<@ Protos: {protos} | {LUAUVERSION} @>--\n"
     disassembled_extra += f"--<@ Time taken: {end - start:.6f}s @>--\n"
     disassembled_str = "\n".join(disassembled)
