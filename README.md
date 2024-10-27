@@ -34,4 +34,4 @@ The `DEBUG` flag is meant for development purposes only. Turn off before using i
 - Does not handle variables kindly
 - No v6 support (not an issue, just not added to this version lol)
 
-Please contribute and fix these bugs and more that you may find (except v6 support, we got dat)
+Please contribute and fix these bugs and more that you may find (except v6 support, we got dat!)
