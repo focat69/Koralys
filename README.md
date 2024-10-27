@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./banner.png" alt="Koralys Disassembler Banner">
+  <img src="./banner.png" alt="Koralys Disassembler Banner" width="500px" height=auto>
 </p>
 
 <h1 align="center">Koralys Disassembler & Decompiler</h1>
