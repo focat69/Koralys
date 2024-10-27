@@ -132,7 +132,8 @@ class Reader:
         data = self.bytecode[self.pos:self.pos+n]
         self.pos += n
         return data
-    
+
+# TODO: fix sourcery code quality issues (currently 12%)
 def deserialize_v5(reader: Reader) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
     typesversion = reader.nextByte()
     if typesversion not in [1, 2, 3]:
