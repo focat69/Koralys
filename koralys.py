@@ -577,10 +577,10 @@ def read_proto(
             capture_type = capture_types[A] if A < len(capture_types) else f"Unknown({A})"
             return f"capture {capture_type} R{B}"
 
-        def jump_if_gen(op: str | None = None, invert: bool = False):
+        def jump_if_gen(op: str | None = None, invert: bool = False, k_mode: bool = False):
             pre_op = invert and " not " or " "
             jump = opcode_handlers["JUMP"]()
-            after_cond = op and f" {op} {aux} " or " "
+            after_cond = op and f" {op} {k_mode and f"K{aux}" or aux} " or " "
             return f"if{pre_op}R{A}{after_cond}then {jump}"
 
         opcode_handlers = {
@@ -630,7 +630,8 @@ def read_proto(
             "JUMPX": lambda: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]",
             "FASTCALL": lambda: f"R{A} = builtin[{C}]",
             "COVERAGE": lambda: "(coverage)",
-            "CAPTURE": __CAPTURE_handler
+            "CAPTURE": __CAPTURE_handler,
+            "JUMPIFEQK": lambda: jump_if_gen("==", k_mode=True)
         }
         if op_name in opcode_handlers:
             output += opcode_handlers[op_name]()
