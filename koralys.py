@@ -620,7 +620,7 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
     if 'sizeProtos' in proto and proto['sizeProtos'] > 0:
         output += "--< Protos >--\n"
         for i, p in enumerate(proto['pTable']):
-            output += f"{'    ' * depth}[{i}] = {read_proto(proto_table[p], depth + 1, proto_table, string_table, luau_version)}\n"
+            output += f"{'    ' * depth}[{i}] = {read_proto(p, depth + 1, proto_table, string_table, luau_version)}\n"
 
     if proto['numUpValues'] > 0:
         output += "--< Upvalues >--\n"
