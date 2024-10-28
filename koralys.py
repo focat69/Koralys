@@ -37,7 +37,16 @@ import sys
 import time
 import struct
 from typing import List, Dict, Tuple, Any
-from luau import GET_OPCODE, GETARG_A, GETARG_B, GETARG_C, GETARG_Bx, GETARG_sBx, GETARG_sAx, OP_TABLE
+from luau import (
+    get_opcode,
+    get_arg_a,
+    get_arg_b,
+    get_arg_c,
+    get_arg_Bx,
+    get_arg_sBx,
+    get_arg_sAx,
+    OP_TABLE,
+)
 
 DEBUG = False  #! Will slow down the decompilation process significantly
 
@@ -384,6 +393,7 @@ def deserialize(
     else:
         raise ValueError(f"Unsupported bytecode version: {version}")
 
+
 def read_proto(
     proto: Dict[str, Any],
     depth: int,
@@ -409,13 +419,13 @@ def read_proto(
     codeIndex = 0
     while codeIndex < len(proto["codeTable"]):
         i = proto["codeTable"][codeIndex]
-        opc = GET_OPCODE(i)
-        A = GETARG_A(i)
-        B = GETARG_B(i)
-        Bx = GETARG_Bx(i)
-        C = GETARG_C(i)
-        sBx = GETARG_sBx(i)
-        sAx = GETARG_sAx(i)
+        opc = get_opcode(i)
+        A = get_arg_a(i)
+        B = get_arg_b(i)
+        Bx = get_arg_Bx(i)
+        C = get_arg_c(i)
+        sBx = get_arg_sBx(i)
+        sAx = get_arg_sAx(i)
 
         op_name = opcodeToOpname.get(opc, "UNKNOWN")
         output += f"{'    ' * depth}[{codeIndex:03}] {op_name:<{max_opname_length}} "
@@ -434,7 +444,9 @@ def read_proto(
 
         def __CAPTURE_handler(_):
             capture_types = ["VAL", "REF", "UPVAL"]
-            capture_type = capture_types[A] if A < len(capture_types) else f"Unknown({A})"
+            capture_type = (
+                capture_types[A] if A < len(capture_types) else f"Unknown({A})"
+            )
             return f"capture {capture_type} R{B}"
 
         def __GETIMPORT_handler(_):
@@ -460,16 +472,19 @@ def read_proto(
                     imported_path = imported_path.join(id_constant["value"])
 
                 return imported_path
+
             import_id = proto["kTable"][Bx]["value"]
             imported_path = import_id_to_name(import_id)
             # todo: this is horrible lol
             return f"R{A} = {imported_path} -- Import ID: {import_id}"
 
-        def jump_if_gen(op: str | None = None, invert: bool = False, k_mode: bool = False):
+        def jump_if_gen(
+            op: str | None = None, invert: bool = False, k_mode: bool = False
+        ):
             """Generates a conditional jump statement based on the provided operation.
 
-            This function constructs a string representing a conditional jump in a specific format, 
-            allowing for optional inversion of the condition and handling of auxiliary values. 
+            This function constructs a string representing a conditional jump in a specific format,
+            allowing for optional inversion of the condition and handling of auxiliary values.
             The generated statement can be used in bytecode or intermediate representations.
 
             Args:
@@ -536,19 +551,31 @@ def read_proto(
             "FASTCALL": lambda _: f"R{A} = builtin[{C}]",
             "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
-            "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True)
+            "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True),
         }
 
         for gen_op_name in ["ADD", "SUB", "MUL", "DIV", "MOD", "POW"]:
             ops = {
-                "ADD": "+", "SUB": "-", "MUL": "*",
-                "DIV": "/", "MOD": "%", "POW": "^"
+                "ADD": "+",
+                "SUB": "-",
+                "MUL": "*",
+                "DIV": "/",
+                "MOD": "%",
+                "POW": "^",
             }
-            opcode_handlers[gen_op_name] = lambda opcode: f"R{A} = R{B} {ops[opcode]} R{C}"
+            opcode_handlers[gen_op_name] = (
+                lambda opcode: f"R{A} = R{B} {ops[opcode]} R{C}"
+            )
+
             def __gen_op_handler(opcode):
                 op = ops[opcode[:-1]]
-                k = proto['kTable'][C] if C < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
+                k = (
+                    proto["kTable"][C]
+                    if C < len(proto["kTable"])
+                    else {"type": "nil", "value": "nil"}
+                )
                 return f"R{A} = R{B} {op} {repr(k['value']) if isinstance(k['value'], str) else k['value']}"
+
             opcode_handlers[f"{gen_op_name}K"] = __gen_op_handler
 
         if op_name in opcode_handlers:
@@ -651,13 +678,13 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
 
     for code_index, i in enumerate(proto["codeTable"]):
         try:
-            opc = GET_OPCODE(i)
-            A = GETARG_A(i)
-            B = GETARG_B(i)
-            Bx = GETARG_Bx(i)
-            C = GETARG_C(i)
-            sBx = GETARG_sBx(i)
-            sAx = GETARG_sAx(i)
+            opc = get_opcode(i)
+            A = get_arg_a(i)
+            B = get_arg_b(i)
+            Bx = get_arg_Bx(i)
+            C = get_arg_c(i)
+            sBx = get_arg_sBx(i)
+            sAx = get_arg_sAx(i)
             aux = (
                 proto["codeTable"][code_index + 1]
                 if code_index + 1 < len(proto["codeTable"])

@@ -1,6 +1,7 @@
 """
 Useful utility functions, and constants (e.g. the operation table, getting opcodes, other stuff) for Luau.
 """
+
 OP_TABLE = [
     {"name": "NOP", "type": "none", "case": 0, "number": 0x00},
     {"name": "BREAK", "type": "none", "case": 1, "number": 0xE3},
@@ -112,7 +113,8 @@ OP_TABLE = [
     {"name": "COUNT", "type": "none", "case": 83, "number": 0x99},
 ]
 
-def GET_OPCODE(i: int) -> int:
+
+def get_opcode(i: int) -> int:
     return (i * 227) & 0xFF
 
 
@@ -127,9 +129,11 @@ def GETARG_B(i: int) -> int:
 def GETARG_C(i: int) -> int:
     return (i >> 24) & 0xFF
 
+
 # def GETARG_D(i: int) -> int:
 #     d = (i >> 16) & 0xFFFF  # Extract 16 bits for D
 #     return d - 0x10000 if d & 0x8000 else d  # Convert to signed
+
 
 def GETARG_Bx(i: int) -> int:
     return i >> 16
