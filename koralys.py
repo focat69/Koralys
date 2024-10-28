@@ -567,12 +567,12 @@ def read_proto(
             aux = proto["codeTable"][codeIndex + 1]
             codeIndex += 1
 
-        def __CALL_handler():
+        def __CALL_handler(_):
             args = f"R{A+1}" + (f" ... R{A+B-1}" if B > 2 else "")
             returns = f"R{A}" + (f" ... R{A+C}" if C > 1 else "")
             return f"{returns} = R{A}({args})"
 
-        def __CAPTURE_handler():
+        def __CAPTURE_handler(_):
             capture_types = ["VAL", "REF", "UPVAL"]
             capture_type = capture_types[A] if A < len(capture_types) else f"Unknown({A})"
             return f"capture {capture_type} R{B}"
@@ -600,58 +600,58 @@ def read_proto(
             return f"if{pre_op}R{A}{after_cond}then {jump}"
 
         opcode_handlers = {
-            "LOADNIL": lambda: f"R{A} = nil",
-            "LOADB": lambda: f"R{A} = {bool(B)}; "
+            "LOADNIL": lambda _: f"R{A} = nil",
+            "LOADB": lambda _: f"R{A} = {bool(B)}; "
             + (f"goto [{codeIndex + C + 1}]" if C != 0 else ""),
-            "LOADN": lambda: f"R{A} = {Bx}",
-            "LOADK": lambda: f"R{A} = {Bx}",
-            "MOVE": lambda: f"R{A} = R{B}",
-            "GETGLOBAL": lambda: f"R{A} = _G[{repr(string_table[aux])}]"
+            "LOADN": lambda _: f"R{A} = {Bx}",
+            "LOADK": lambda _: f"R{A} = {Bx}",
+            "MOVE": lambda _: f"R{A} = R{B}",
+            "GETGLOBAL": lambda _: f"R{A} = _G[{repr(string_table[aux])}]"
             if aux is not None and aux < len(string_table)
             else f"R{A} = _G[Invalid string index]",
-            "SETGLOBAL": lambda: f"_G[{repr(string_table[aux])}]"
+            "SETGLOBAL": lambda _: f"_G[{repr(string_table[aux])}]"
             if aux is not None and aux < len(string_table)
             else f"_G[Invalid string index] = R{A}",
-            "GETUPVAL": lambda: f"R{A} = U{B}",
-            "SETUPVAL": lambda: f"U{B} = R{A}",
-            "CLOSEUPVALS": lambda: f"close upvalues R{A}+",
-            "GETIMPORT": lambda: f"R{A} = {proto['kTable'][Bx]['value']}",
-            "GETTABLE": lambda: f"R{A} = R{B}[R{C}]",
-            "SETTABLE": lambda: f"R{A} = R{B}[R{C}]",
-            "GETTABLEKS": lambda: f"R{A} = R{B}[{repr(string_table[aux])}"
+            "GETUPVAL": lambda _: f"R{A} = U{B}",
+            "SETUPVAL": lambda _: f"U{B} = R{A}",
+            "CLOSEUPVALS": lambda _: f"close upvalues R{A}+",
+            "GETIMPORT": lambda _: f"R{A} = {proto['kTable'][Bx]['value']}",
+            "GETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
+            "SETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
+            "GETTABLEKS": lambda _: f"R{A} = R{B}[{repr(string_table[aux])}"
             if aux is not None and aux < len(string_table)
             else f"R{A} = R{B}[Invalid string index]",
-            "SETTABLEKS": lambda: f"R{B}[{repr(string_table[aux])} = R{A}"
+            "SETTABLEKS": lambda _: f"R{B}[{repr(string_table[aux])} = R{A}"
             if aux is not None and aux < len(string_table)
             else f"R{B}[Invalid string index] = R{A}",
-            "GETTABLEN": lambda: f"R{A} = R{B}[{C + 1}]",
-            "SETTABLEN": lambda: f"R{B}[{C + 1}] = R{A}",
-            "NEWCLOSURE": lambda: f"R{A} = closure(proto[{Bx}])",
-            "NAMECALL": lambda: f"R{A} = R{B}[{repr(string_table[aux])}; R{A+1} = R{B}"
+            "GETTABLEN": lambda _: f"R{A} = R{B}[{C + 1}]",
+            "SETTABLEN": lambda _: f"R{B}[{C + 1}] = R{A}",
+            "NEWCLOSURE": lambda _: f"R{A} = closure(proto[{Bx}])",
+            "NAMECALL": lambda _: f"R{A} = R{B}[{repr(string_table[aux])}; R{A+1} = R{B}"
             if aux is not None and aux < len(string_table)
             else f"R{A} = R{B}[Invalid String Index]; R{A+1} = R{B}",
             "CALL": __CALL_handler,
-            "RETURN": lambda: f"return R{A} ..."
+            "RETURN": lambda _: f"return R{A} ..."
             if B == 0
             else "return"
             if B == 1
             else f"return R{A} ... R{A+B-2}",
-            "JUMP": lambda: f"goto [{(codeIndex + 1 + sBx) & 0xFF}]",
-            "JUMPBACK": lambda: f"goto [{(codeIndex + 1 - sBx) & 0xFF}]",
-            "JUMPIF": lambda: jump_if_gen(),
-            "JUMPIFNOT": lambda: jump_if_gen(None, True),
-            "JUMPIFEQ": lambda: jump_if_gen("=="),
-            "JUMPIFLE": lambda: jump_if_gen("<="),
-            "JUMPIFNOTLE": lambda: jump_if_gen("<=", True),
-            "JUMPIFNOTLT": lambda: jump_if_gen("<", True),
-            "JUMPX": lambda: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]",
-            "FASTCALL": lambda: f"R{A} = builtin[{C}]",
-            "COVERAGE": lambda: "(coverage)",
+            "JUMP": lambda _: f"goto [{(codeIndex + 1 + sBx) & 0xFF}]",
+            "JUMPBACK": lambda _: f"goto [{(codeIndex + 1 - sBx) & 0xFF}]",
+            "JUMPIF": lambda _: jump_if_gen(),
+            "JUMPIFNOT": lambda _: jump_if_gen(None, True),
+            "JUMPIFEQ": lambda _: jump_if_gen("=="),
+            "JUMPIFLE": lambda _: jump_if_gen("<="),
+            "JUMPIFNOTLE": lambda _: jump_if_gen("<=", True),
+            "JUMPIFNOTLT": lambda _: jump_if_gen("<", True),
+            "JUMPX": lambda _: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]",
+            "FASTCALL": lambda _: f"R{A} = builtin[{C}]",
+            "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
-            "JUMPIFEQK": lambda: jump_if_gen("==", k_mode=True)
+            "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True)
         }
         if op_name in opcode_handlers:
-            output += opcode_handlers[op_name]()
+            output += opcode_handlers[op_name](op_name)
         else:
             output += f"Unknown opcode: {opc}"
 
