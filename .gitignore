@@ -2,3 +2,5 @@ input.luau
 output.txt
 decompiled.luau
 *.luac
+*.pyc
+__pycache__
