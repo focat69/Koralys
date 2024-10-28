@@ -38,9 +38,12 @@ import time
 import struct
 from typing import List, Dict, Tuple, Any
 
-DEBUG = False #! Will slow down the decompilation process significantly
+DEBUG = False  #! Will slow down the decompilation process significantly
+
+
 def debug(*args, **kwargs):
     return print(*args, **kwargs) if DEBUG else None
+
 
 # < CONSTANT TYPES > #
 LBC_CONSTANT_NIL = 0
@@ -51,6 +54,7 @@ LBC_CONSTANT_IMPORT = 4
 LBC_CONSTANT_TABLE = 5
 LBC_CONSTANT_CLOSURE = 6
 LBC_CONSTANT_VECTOR = 7
+
 
 # < BYTECODE READER > #
 class Reader:
@@ -63,7 +67,9 @@ class Reader:
 
     def nextByte(self) -> int:
         if not self.canRead(1):
-            raise IndexError(f"Attempted to read byte at position {self.pos}, but bytecode length is {len(self.bytecode)}")
+            raise IndexError(
+                f"Attempted to read byte at position {self.pos}, but bytecode length is {len(self.bytecode)}"
+            )
         v = self.bytecode[self.pos]
         self.pos += 1
         return v
@@ -72,9 +78,7 @@ class Reader:
         return chr(self.nextByte())
 
     def nextUint32(self) -> int:
-        return self.unpackStruct(
-            4, 'Attempted to read 4 bytes at position ', '<I'
-        )
+        return self.unpackStruct(4, "Attempted to read 4 bytes at position ", "<I")
 
     def nextInt(self) -> int:
         b = [self.nextByte() for _ in range(4)]
@@ -85,7 +89,9 @@ class Reader:
         shift = 0
         while True:
             if not self.canRead(1):
-                raise IndexError(f"Unexpected end of bytecode while reading VarInt at position {self.pos}")
+                raise IndexError(
+                    f"Unexpected end of bytecode while reading VarInt at position {self.pos}"
+                )
             b = self.nextByte()
             result |= (b & 0x7F) << shift
             if not (b & 0x80):
@@ -96,20 +102,18 @@ class Reader:
     def nextString(self) -> str:
         length = self.nextVarInt()
         if not self.canRead(length):
-            raise IndexError(f"Attempted to read string of length {length} at position {self.pos}, but bytecode length is {len(self.bytecode)}")
-        result = self.bytecode[self.pos:self.pos+length].decode('utf-8')
+            raise IndexError(
+                f"Attempted to read string of length {length} at position {self.pos}, but bytecode length is {len(self.bytecode)}"
+            )
+        result = self.bytecode[self.pos : self.pos + length].decode("utf-8")
         self.pos += length
         return result
 
     def nextFloat(self) -> float:
-        return self.unpackStruct(
-            4, 'Attempted to read float at position ', '<f'
-        )
+        return self.unpackStruct(4, "Attempted to read float at position ", "<f")
 
     def nextDouble(self) -> float:
-        return self.unpackStruct(
-            8, 'Attempted to read double at position ', '<d'
-        )
+        return self.unpackStruct(8, "Attempted to read double at position ", "<d")
 
     # TODO Rename this here and in `nextUint32`, `nextFloat` and `nextDouble`
     def unpackStruct(self, n, arg1, format):
@@ -117,24 +121,31 @@ class Reader:
             raise IndexError(
                 f"{arg1}{self.pos}, but bytecode length is {len(self.bytecode)}"
             )
-        value = struct.unpack(format, self.bytecode[self.pos:self.pos + n])[0]
+        value = struct.unpack(format, self.bytecode[self.pos : self.pos + n])[0]
         self.pos += n
         return value
 
     def skip(self, n: int) -> None:
         if not self.canRead(n):
-            raise IndexError(f"Attempted to skip {n} bytes at position {self.pos}, but bytecode length is {len(self.bytecode)}")
+            raise IndexError(
+                f"Attempted to skip {n} bytes at position {self.pos}, but bytecode length is {len(self.bytecode)}"
+            )
         self.pos += n
 
     def read(self, n: int) -> bytes:
         if not self.canRead(n):
-            raise IndexError(f"Attempted to read {n} bytes at position {self.pos}, but bytecode length is {len(self.bytecode)}")
-        data = self.bytecode[self.pos:self.pos+n]
+            raise IndexError(
+                f"Attempted to read {n} bytes at position {self.pos}, but bytecode length is {len(self.bytecode)}"
+            )
+        data = self.bytecode[self.pos : self.pos + n]
         self.pos += n
         return data
 
+
 # TODO: fix sourcery code quality issues (currently 12%)
-def deserialize_v5(reader: Reader) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
+def deserialize_v5(
+    reader: Reader,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
     types_version = reader.nextByte()
     if types_version not in [1, 2, 3]:
         raise ValueError(f"Invalid types version (types version: {types_version})")
@@ -149,199 +160,219 @@ def deserialize_v5(reader: Reader) -> Tuple[Dict[str, Any], List[Dict[str, Any]]
     size_protos = reader.nextVarInt()
     proto_table.extend(
         {
-            'codeTable': [],
-            'kTable': [],
-            'pTable': [],
-            'smallLineInfo': [],
-            'largeLineInfo': [],
+            "codeTable": [],
+            "kTable": [],
+            "pTable": [],
+            "smallLineInfo": [],
+            "largeLineInfo": [],
         }
         for _ in range(size_protos)
     )
     for i in range(size_protos):
         proto = proto_table[i]
-        proto['maxStackSize'] = reader.nextByte()
-        proto['numParams'] = reader.nextByte()
-        proto['numUpValues'] = reader.nextByte()
-        proto['isVarArg'] = reader.nextByte()
+        proto["maxStackSize"] = reader.nextByte()
+        proto["numParams"] = reader.nextByte()
+        proto["numUpValues"] = reader.nextByte()
+        proto["isVarArg"] = reader.nextByte()
 
-        proto['flags'] = reader.nextByte()
+        proto["flags"] = reader.nextByte()
         typesize = reader.nextVarInt()
-        proto['typeInfo'] = [reader.nextByte() for _ in range(typesize)]
+        proto["typeInfo"] = [reader.nextByte() for _ in range(typesize)]
 
-        proto['sizeCode'] = reader.nextVarInt()
-        for _ in range(proto['sizeCode']):
-            proto['codeTable'].append(reader.nextInt())
+        proto["sizeCode"] = reader.nextVarInt()
+        for _ in range(proto["sizeCode"]):
+            proto["codeTable"].append(reader.nextInt())
 
-        proto['sizeConsts'] = reader.nextVarInt()
-        for _ in range(proto['sizeConsts']):
-            k = {'type': reader.nextByte()}
-            if k['type'] == LBC_CONSTANT_BOOLEAN:
-                k['value'] = reader.nextByte() == 1
-            elif k['type'] == LBC_CONSTANT_NUMBER:
-                k['value'] = reader.nextDouble()
-            elif k['type'] == LBC_CONSTANT_STRING:
+        proto["sizeConsts"] = reader.nextVarInt()
+        for _ in range(proto["sizeConsts"]):
+            k = {"type": reader.nextByte()}
+            if k["type"] == LBC_CONSTANT_BOOLEAN:
+                k["value"] = reader.nextByte() == 1
+            elif k["type"] == LBC_CONSTANT_NUMBER:
+                k["value"] = reader.nextDouble()
+            elif k["type"] == LBC_CONSTANT_STRING:
                 index = reader.nextVarInt()
                 adjusted_index = index - 1
                 if 0 <= adjusted_index < len(string_table):
-                    k['value'] = string_table[adjusted_index]
+                    k["value"] = string_table[adjusted_index]
                 else:
-                    k['value'] = "Invalid string index"
-            elif k['type'] == LBC_CONSTANT_IMPORT:
-                k['value'] = reader.nextInt()
-            elif k['type'] == LBC_CONSTANT_TABLE:
-                k['value'] = {'size': reader.nextVarInt(), 'ids': []}
-                for _ in range(k['value']['size']):
-                    k['value']['ids'].append(reader.nextVarInt() + 1)
-            elif k['type'] == LBC_CONSTANT_CLOSURE:
-                k['value'] = reader.nextVarInt() + 1
-            elif k['type'] == LBC_CONSTANT_VECTOR:
-                k['value'] = [reader.nextFloat() for _ in range(4)]
-            elif k['type'] != 0:
+                    k["value"] = "Invalid string index"
+            elif k["type"] == LBC_CONSTANT_IMPORT:
+                k["value"] = reader.nextInt()
+            elif k["type"] == LBC_CONSTANT_TABLE:
+                k["value"] = {"size": reader.nextVarInt(), "ids": []}
+                for _ in range(k["value"]["size"]):
+                    k["value"]["ids"].append(reader.nextVarInt() + 1)
+            elif k["type"] == LBC_CONSTANT_CLOSURE:
+                k["value"] = reader.nextVarInt() + 1
+            elif k["type"] == LBC_CONSTANT_VECTOR:
+                k["value"] = [reader.nextFloat() for _ in range(4)]
+            elif k["type"] != 0:
                 raise ValueError(f"Unrecognized constant type: {k['type']}")
-            proto['kTable'].append(k)
+            proto["kTable"].append(k)
 
-        proto['sizeProtos'] = reader.nextVarInt()
-        for _ in range(proto['sizeProtos']):
-            proto['pTable'].append(proto_table[reader.nextVarInt()])
+        proto["sizeProtos"] = reader.nextVarInt()
+        for _ in range(proto["sizeProtos"]):
+            proto["pTable"].append(proto_table[reader.nextVarInt()])
 
-        proto['lineDefined'] = reader.nextVarInt()
+        proto["lineDefined"] = reader.nextVarInt()
 
         protoSourceId = reader.nextVarInt()
         if protoSourceId >= len(string_table):
-            raise IndexError(f"Index {protoSourceId} out of range for stringTable with length {len(string_table)}")
-        proto['source'] = string_table[protoSourceId]
+            raise IndexError(
+                f"Index {protoSourceId} out of range for stringTable with length {len(string_table)}"
+            )
+        proto["source"] = string_table[protoSourceId]
 
         if reader.nextByte() == 1:  # has line info?
             compKey = reader.nextByte()
-            for _ in range(proto['sizeCode']):
-                proto['smallLineInfo'].append(reader.nextByte())
+            for _ in range(proto["sizeCode"]):
+                proto["smallLineInfo"].append(reader.nextByte())
 
-            _ = (proto['sizeCode'] + 3) & -4
-            intervals = ((proto['sizeCode'] - 1) >> compKey) + 1
+            _ = (proto["sizeCode"] + 3) & -4
+            intervals = ((proto["sizeCode"] - 1) >> compKey) + 1
 
             for _ in range(intervals):
-                proto['largeLineInfo'].append(reader.nextInt())
+                proto["largeLineInfo"].append(reader.nextInt())
 
         if reader.nextByte() == 1:  # has debug info?
             raise ValueError("only ROBLOX scripts can be disassembled")
 
     mainProtoId = reader.nextVarInt()
     if mainProtoId >= len(proto_table):
-        raise IndexError(f"Index {mainProtoId} out of range for protoTable with length {len(proto_table)}")
+        raise IndexError(
+            f"Index {mainProtoId} out of range for protoTable with length {len(proto_table)}"
+        )
     return proto_table[mainProtoId], proto_table, string_table, luau_version
 
-def parse_proto(reader: Reader, string_table: List[str], types_version: int) -> Dict[str, Any]:
+
+def parse_proto(
+    reader: Reader, string_table: List[str], types_version: int
+) -> Dict[str, Any]:
     proto: Dict[str, Any] = {
-        'maxStackSize': reader.nextByte(),
-        'numParams': reader.nextByte(),
-        'numUpValues': reader.nextByte(),
-        'isVarArg': reader.nextByte(),
-        'flags': reader.nextByte(),
-        'typeInfo': [],
-        'codeTable': [],
-        'kTable': [],
-        'pTable': [],
-        'lineInfo': None,
-        'debugInfo': None,
-        'source': "",
+        "maxStackSize": reader.nextByte(),
+        "numParams": reader.nextByte(),
+        "numUpValues": reader.nextByte(),
+        "isVarArg": reader.nextByte(),
+        "flags": reader.nextByte(),
+        "typeInfo": [],
+        "codeTable": [],
+        "kTable": [],
+        "pTable": [],
+        "lineInfo": None,
+        "debugInfo": None,
+        "source": "",
     }
 
     type_size = reader.nextVarInt()
-    proto['typeInfo'] = [reader.nextByte() for _ in range(type_size)]
+    proto["typeInfo"] = [reader.nextByte() for _ in range(type_size)]
 
     size_code = reader.nextVarInt()
     debug(f"  Code size: {size_code}")
-    proto['codeTable'] = [reader.nextUint32() for _ in range(size_code)]
-    proto['sizeCode'] = size_code
+    proto["codeTable"] = [reader.nextUint32() for _ in range(size_code)]
+    proto["sizeCode"] = size_code
 
     size_consts = reader.nextVarInt()
     debug(f"  Number of constants: {size_consts}")
-    proto['kTable'] = [parse_constant(reader, string_table) for _ in range(size_consts)]
+    proto["kTable"] = [parse_constant(reader, string_table) for _ in range(size_consts)]
 
     size_protos = reader.nextVarInt()
     debug(f"  Number of child protos: {size_protos}")
-    proto['pTable'] = [reader.nextVarInt() for _ in range(size_protos)]
-    proto['numChildren'] = size_protos
+    proto["pTable"] = [reader.nextVarInt() for _ in range(size_protos)]
+    proto["numChildren"] = size_protos
 
-    proto['lineDefined'] = reader.nextVarInt()
+    proto["lineDefined"] = reader.nextVarInt()
 
     proto_source_id = reader.nextVarInt()
     if 0 <= proto_source_id - 1 < len(string_table):
-        proto['source'] = string_table[proto_source_id - 1]
+        proto["source"] = string_table[proto_source_id - 1]
     else:
-        proto['source'] = f"Invalid source index: {proto_source_id}"
+        proto["source"] = f"Invalid source index: {proto_source_id}"
 
     if reader.nextByte() == 1:  # has line info?
         debug("  Proto has line info")
-        proto['lineInfo'] = parse_line_info(reader, size_code)
+        proto["lineInfo"] = parse_line_info(reader, size_code)
 
     if reader.nextByte() == 1:  # has debug info?
         debug("  Proto has debug info")
-        proto['debugInfo'] = parse_debug_info(reader, string_table)
+        proto["debugInfo"] = parse_debug_info(reader, string_table)
 
     return proto
 
+
 def parse_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
     try:
-        k = {'type': reader.nextByte()}
-        if k['type'] == LBC_CONSTANT_NIL:
-            k['value'] = None
-        elif k['type'] == LBC_CONSTANT_BOOLEAN:
-            k['value'] = reader.nextByte() == 1
-        elif k['type'] == LBC_CONSTANT_NUMBER:
-            k['value'] = reader.nextDouble()
-        elif k['type'] == LBC_CONSTANT_STRING:
+        k = {"type": reader.nextByte()}
+        if k["type"] == LBC_CONSTANT_NIL:
+            k["value"] = None
+        elif k["type"] == LBC_CONSTANT_BOOLEAN:
+            k["value"] = reader.nextByte() == 1
+        elif k["type"] == LBC_CONSTANT_NUMBER:
+            k["value"] = reader.nextDouble()
+        elif k["type"] == LBC_CONSTANT_STRING:
             index = reader.nextVarInt()
             adjusted_index = index - 1
             if 0 <= adjusted_index < len(string_table):
-                k['value'] = string_table[adjusted_index]
+                k["value"] = string_table[adjusted_index]
             else:
-                k['value'] = f"Invalid string index: {index}"
-        elif k['type'] == LBC_CONSTANT_IMPORT:
-            k['value'] = reader.nextUint32()
-        elif k['type'] == LBC_CONSTANT_TABLE:
+                k["value"] = f"Invalid string index: {index}"
+        elif k["type"] == LBC_CONSTANT_IMPORT:
+            k["value"] = reader.nextUint32()
+        elif k["type"] == LBC_CONSTANT_TABLE:
             size = reader.nextVarInt()
-            k['value'] = {'size': size, 'ids': [reader.nextVarInt() for _ in range(size)]}
-        elif k['type'] == LBC_CONSTANT_CLOSURE:
-            k['value'] = reader.nextVarInt()
-        elif k['type'] == LBC_CONSTANT_VECTOR:
-            k['value'] = [reader.nextFloat() for _ in range(4)]
-        elif k['type'] == 70:
-            k['value'] = reader.nextVarInt()
+            k["value"] = {
+                "size": size,
+                "ids": [reader.nextVarInt() for _ in range(size)],
+            }
+        elif k["type"] == LBC_CONSTANT_CLOSURE:
+            k["value"] = reader.nextVarInt()
+        elif k["type"] == LBC_CONSTANT_VECTOR:
+            k["value"] = [reader.nextFloat() for _ in range(4)]
+        elif k["type"] == 70:
+            k["value"] = reader.nextVarInt()
         else:
-            k['value'] = f"Unknown type: {k['type']}, Value: {reader.nextVarInt()}"
+            k["value"] = f"Unknown type: {k['type']}, Value: {reader.nextVarInt()}"
     except IndexError as e:
-        k['value'] = f"Error reading constant: {str(e)}"
+        k["value"] = f"Error reading constant: {str(e)}"
     return k
 
+
 def parse_line_info(reader: Reader, size_code: int) -> Dict[str, Any]:
-    lineInfo = {'compKey': reader.nextByte(), 'intervals': []}
-    lineInfo['intervals'] = [reader.nextByte() for _ in range(size_code)]
+    lineInfo = {"compKey": reader.nextByte(), "intervals": []}
+    lineInfo["intervals"] = [reader.nextByte() for _ in range(size_code)]
 
     _ = (size_code + 3) & -4
-    largeIntervals = ((size_code - 1) >> lineInfo['compKey']) + 1
+    largeIntervals = ((size_code - 1) >> lineInfo["compKey"]) + 1
 
-    lineInfo['intervals'].extend([reader.nextUint32() for _ in range(largeIntervals)])
+    lineInfo["intervals"].extend([reader.nextUint32() for _ in range(largeIntervals)])
     return lineInfo
+
 
 def parse_debug_info(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
     debug_info = {
-        'varInfo': [],
-        'upvalueInfo': [],
+        "varInfo": [],
+        "upvalueInfo": [],
     }
     sizeVars = reader.nextVarInt()
     for _ in range(sizeVars):
-        debug_info['varInfo'].append({
-            'name': string_table[reader.nextVarInt() - 1],
-            'startpc': reader.nextVarInt(),
-            'endpc': reader.nextVarInt(),
-            'reg': reader.nextByte(),
-        })
+        debug_info["varInfo"].append(
+            {
+                "name": string_table[reader.nextVarInt() - 1],
+                "startpc": reader.nextVarInt(),
+                "endpc": reader.nextVarInt(),
+                "reg": reader.nextByte(),
+            }
+        )
     sizeUpvalues = reader.nextVarInt()
-    debug_info['upvalueInfo'] = [string_table[reader.nextVarInt() - 1] for _ in range(sizeUpvalues)]
+    debug_info["upvalueInfo"] = [
+        string_table[reader.nextVarInt() - 1] for _ in range(sizeUpvalues)
+    ]
     return debug_info
 
-def deserialize(bytecode: bytes) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str], str]:
+
+def deserialize(
+    bytecode: bytes,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str], str]:
     reader = Reader(bytecode)
     version = reader.nextByte()
     debug(f"Bytecode version: {version}")
@@ -349,6 +380,7 @@ def deserialize(bytecode: bytes) -> Tuple[Dict[str, Any], List[Dict[str, Any]], 
         return deserialize_v5(reader)
     else:
         raise ValueError(f"Unsupported bytecode version: {version}")
+
 
 def getluauoptable():
     return [
@@ -382,9 +414,27 @@ def getluauoptable():
         {"name": "JUMPIFEQ", "type": "iAsBx", "case": 27, "number": 0xF1, "aux": True},
         {"name": "JUMPIFLE", "type": "iAsBx", "case": 28, "number": 0xD4, "aux": True},
         {"name": "JUMPIFLT", "type": "iAsBx", "case": 29, "number": 0xB7, "aux": True},
-        {"name": "JUMPIFNOTEQ", "type": "iAsBx", "case": 30, "number": 0x9A, "aux": True},
-        {"name": "JUMPIFNOTLE", "type": "iAsBx", "case": 31, "number": 0x7D, "aux": True},
-        {"name": "JUMPIFNOTLT", "type": "iAsBx", "case": 32, "number": 0x60, "aux": True},
+        {
+            "name": "JUMPIFNOTEQ",
+            "type": "iAsBx",
+            "case": 30,
+            "number": 0x9A,
+            "aux": True,
+        },
+        {
+            "name": "JUMPIFNOTLE",
+            "type": "iAsBx",
+            "case": 31,
+            "number": 0x7D,
+            "aux": True,
+        },
+        {
+            "name": "JUMPIFNOTLT",
+            "type": "iAsBx",
+            "case": 32,
+            "number": 0x60,
+            "aux": True,
+        },
         {"name": "ADD", "type": "iABC", "case": 33, "number": 0x43},
         {"name": "SUB", "type": "iABC", "case": 34, "number": 0x26},
         {"name": "MUL", "type": "iABC", "case": 35, "number": 0x09},
@@ -429,46 +479,66 @@ def getluauoptable():
         {"name": "FASTCALL2", "type": "iABC", "case": 74, "number": 0x9E, "aux": True},
         {"name": "FASTCALL2K", "type": "iABC", "case": 75, "number": 0x81, "aux": True},
         {"name": "FORGPREP", "type": "iAB", "case": 76, "number": 0x64},
-        {"name": "JUMPXEQKNIL", "type": "iAsBx", "case": 77, "number": 0x47, "aux": True},
+        {
+            "name": "JUMPXEQKNIL",
+            "type": "iAsBx",
+            "case": 77,
+            "number": 0x47,
+            "aux": True,
+        },
         {"name": "JUMPXEQKB", "type": "iAsBx", "case": 78, "number": 0x2A, "aux": True},
         {"name": "JUMPXEQKN", "type": "iAsBx", "case": 79, "number": 0x0D, "aux": True},
         {"name": "JUMPXEQKS", "type": "iAsBx", "case": 80, "number": 0xF0, "aux": True},
         {"name": "IDIV", "type": "iABC", "case": 81, "number": 0xD3},
         {"name": "IDIVK", "type": "iABC", "case": 82, "number": 0xB6},
-        {"name": "COUNT", "type": "none", "case": 83, "number": 0x99}
+        {"name": "COUNT", "type": "none", "case": 83, "number": 0x99},
     ]
+
 
 def GET_OPCODE(i: int) -> int:
     return (i * 227) & 0xFF
 
+
 def GETARG_A(i: int) -> int:
     return (i >> 8) & 0xFF
+
 
 def GETARG_B(i: int) -> int:
     return (i >> 16) & 0xFF
 
+
 def GETARG_C(i: int) -> int:
     return (i >> 24) & 0xFF
+
 
 def GETARG_Bx(i: int) -> int:
     return i >> 16
 
+
 def GETARG_sBx(i: int) -> int:
     return (i >> 16) - 131071
+
 
 def GETARG_sAx(i: int) -> int:
     return i >> 8
 
-def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, Any]], string_table: List[str], luau_version: str) -> str:
+
+def read_proto(
+    proto: Dict[str, Any],
+    depth: int,
+    proto_table: List[Dict[str, Any]],
+    string_table: List[str],
+    luau_version: str,
+) -> str:
     output = ""
     tab_space = "    " * (depth - 1)
 
     output += f"{tab_space}function({', '.join(['...' if proto['isVarArg'] else ''] + [f'R{i}' for i in range(proto['numParams'])])})\n"
 
     luauOpTable = getluauoptable()
-    opnameToOpcode = {info['name']: info['number'] for info in luauOpTable}
-    opcodeToOpname = {info['number']: info['name'] for info in luauOpTable}
-    max_opname_length = max(len(info['name']) for info in luauOpTable)
+    opnameToOpcode = {info["name"]: info["number"] for info in luauOpTable}
+    opcodeToOpname = {info["number"]: info["name"] for info in luauOpTable}
+    max_opname_length = max(len(info["name"]) for info in luauOpTable)
 
     def get_opcode(opname: str) -> int:
         opcode = opnameToOpcode.get(opname)
@@ -477,8 +547,8 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
         return opcode
 
     codeIndex = 0
-    while codeIndex < len(proto['codeTable']):
-        i = proto['codeTable'][codeIndex]
+    while codeIndex < len(proto["codeTable"]):
+        i = proto["codeTable"][codeIndex]
         opc = GET_OPCODE(i)
         A = GETARG_A(i)
         B = GETARG_B(i)
@@ -491,18 +561,18 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
         output += f"{'    ' * depth}[{codeIndex:03}] {op_name:<{max_opname_length}} "
 
         aux = None
-        if any(info['name'] == op_name and info.get('aux', False) for info in luauOpTable) and codeIndex + 1 < len(proto['codeTable']):
-            aux = proto['codeTable'][codeIndex + 1]
+        if any(
+            info["name"] == op_name and info.get("aux", False) for info in luauOpTable
+        ) and codeIndex + 1 < len(proto["codeTable"]):
+            aux = proto["codeTable"][codeIndex + 1]
             codeIndex += 1
+
         def __CALL_handler():
             args = f"R{A+1}" + (f" ... R{A+C-1}" if C > 1 else "")
             returns = f"R{A}" + (f" ... R{A+B-2}" if B > 1 else "")
             return f"{returns} = R{A}({args})"
 
-        def jump_if_gen(
-             op: str | None = None,
-             invert: bool = False
-        ):
+        def jump_if_gen(op: str | None = None, invert: bool = False):
             pre_op = invert and " not " or " "
             jump = opcode_handlers["JUMP"]()
             after_cond = op and f" {op} {aux} " or " "
@@ -510,93 +580,48 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
 
         opcode_handlers = {
             "LOADNIL": lambda: f"R{A} = nil",
-            "LOADB": lambda: f"R{A} = {bool(B)}; " + (f"goto [{codeIndex + C + 1}]" if C != 0 else ""),
+            "LOADB": lambda: f"R{A} = {bool(B)}; "
+            + (f"goto [{codeIndex + C + 1}]" if C != 0 else ""),
             "LOADN": lambda: f"R{A} = {Bx}",
             "MOVE": lambda: f"R{A} = R{B}",
-            "GETGLOBAL":
-                    lambda:
-                         f"R{A} = _G[{repr(string_table[aux])}]"
-                          if aux is not None and aux < len(string_table)
-                        else f"R{A} = _G[Invalid string index]",
-            "SETGLOBAL":
-                lambda:
-                     f"_G[{repr(string_table[aux])}]"
-                       if aux is not None and aux < len(string_table)
-                     else f"_G[Invalid string index] = R{A}",
-            "GETUPVAL":
-                lambda:
-                     f"R{A} = U{B}",
-            "SETUPVAL":
-                lambda:
-                     f"U{B} = R{A}",
-            "CLOSEUPVALS":
-                lambda:
-                     f"close upvalues R{A}+",
-            "GETIMPORT":
-                lambda:
-                     f"R{A} = {proto['kTable'][Bx]['value']}",
-            "GETTABLE":
-                lambda:
-                     f"R{A} = R{B}[R{C}]",
-            "SETTABLE":
-                lambda:
-                     f"R{A} = R{B}[R{C}]",
-            "GETTABLEKS":
-                lambda:
-                     f"R{A} = R{B}[{repr(string_table[aux])}"
-                       if aux is not None and aux < len(string_table)
-                     else f"R{A} = R{B}[Invalid string index]",
-            "SETTABLEKS":
-                lambda:
-                     f"R{B}[{repr(string_table[aux])} = R{A}"
-                       if aux is not None and aux < len(string_table)
-                     else f"R{B}[Invalid string index] = R{A}",
-            "GETTABLEN":
-                lambda:
-                     f"R{A} = R{B}[{C + 1}]",
-            "SETTABLEN":
-                lambda:
-                     f"R{B}[{C + 1}] = R{A}",
-            "NEWCLOSURE":
-                lambda:
-                     f"R{A} = closure(proto[{Bx}])",
-            "NAMECALL":
-                lambda:
-                     f"R{A} = R{B}[{repr(string_table[aux])}; R{A+1} = R{B}"
-                       if aux is not None and aux < len(string_table)
-                     else f"R{A} = R{B}[Invalid String Index]; R{A+1} = R{B}",
+            "GETGLOBAL": lambda: f"R{A} = _G[{repr(string_table[aux])}]"
+            if aux is not None and aux < len(string_table)
+            else f"R{A} = _G[Invalid string index]",
+            "SETGLOBAL": lambda: f"_G[{repr(string_table[aux])}]"
+            if aux is not None and aux < len(string_table)
+            else f"_G[Invalid string index] = R{A}",
+            "GETUPVAL": lambda: f"R{A} = U{B}",
+            "SETUPVAL": lambda: f"U{B} = R{A}",
+            "CLOSEUPVALS": lambda: f"close upvalues R{A}+",
+            "GETIMPORT": lambda: f"R{A} = {proto['kTable'][Bx]['value']}",
+            "GETTABLE": lambda: f"R{A} = R{B}[R{C}]",
+            "SETTABLE": lambda: f"R{A} = R{B}[R{C}]",
+            "GETTABLEKS": lambda: f"R{A} = R{B}[{repr(string_table[aux])}"
+            if aux is not None and aux < len(string_table)
+            else f"R{A} = R{B}[Invalid string index]",
+            "SETTABLEKS": lambda: f"R{B}[{repr(string_table[aux])} = R{A}"
+            if aux is not None and aux < len(string_table)
+            else f"R{B}[Invalid string index] = R{A}",
+            "GETTABLEN": lambda: f"R{A} = R{B}[{C + 1}]",
+            "SETTABLEN": lambda: f"R{B}[{C + 1}] = R{A}",
+            "NEWCLOSURE": lambda: f"R{A} = closure(proto[{Bx}])",
+            "NAMECALL": lambda: f"R{A} = R{B}[{repr(string_table[aux])}; R{A+1} = R{B}"
+            if aux is not None and aux < len(string_table)
+            else f"R{A} = R{B}[Invalid String Index]; R{A+1} = R{B}",
             "CALL": __CALL_handler,
-            "RETURN":
-                lambda:
-                     f"return R{A} ..."
-                       if B == 0
-                     else "return"
-                          if B == 1
-                        else f"return R{A} ... R{A+B-2}",
-            "JUMP":
-                lambda:
-                     f"goto [{(codeIndex + 1 + sBx) & 0xFF}]",
-            "JUMPBACK":
-                lambda:
-                     f"goto [{(codeIndex + 1 - sBx) & 0xFF}]",
-            "JUMPIF":
-                lambda:
-                     jump_if_gen(),
-            "JUMPIFNOT":
-                lambda:
-                     jump_if_gen(None, True),
-            "JUMPIFEQ":
-                lambda:
-                     jump_if_gen("=="),
-            "JUMPIFLE":
-                lambda:
-                     jump_if_gen("<="),
-			"JUMPIFNOTLE":
-				lambda:
-					 jump_if_gen("<=", True),
-            "JUMPIFNOTLT":
-				lambda:
-					 jump_if_gen("<", True),
+            "RETURN": lambda: f"return R{A} ..."
+            if B == 0
+            else "return"
+            if B == 1
+            else f"return R{A} ... R{A+B-2}",
+            "JUMP": lambda: f"goto [{(codeIndex + 1 + sBx) & 0xFF}]",
+            "JUMPBACK": lambda: f"goto [{(codeIndex + 1 - sBx) & 0xFF}]",
+            "JUMPIF": lambda: jump_if_gen(),
+            "JUMPIFNOT": lambda: jump_if_gen(None, True),
+            "JUMPIFEQ": lambda: jump_if_gen("=="),
+            "JUMPIFLE": lambda: jump_if_gen("<="),
+            "JUMPIFNOTLE": lambda: jump_if_gen("<=", True),
+            "JUMPIFNOTLT": lambda: jump_if_gen("<", True),
         }
         if op_name in opcode_handlers:
             output += opcode_handlers[op_name]()
@@ -608,29 +633,31 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
 
     output += "end\n"
 
-    if len(proto['kTable']) > 0:
+    if len(proto["kTable"]) > 0:
         output += "--< Constants >--\n"
         constant_types = {
             LBC_CONSTANT_NIL: "nil",
-            LBC_CONSTANT_BOOLEAN: lambda k: str(k['value']).lower(),
-            LBC_CONSTANT_STRING: lambda k: repr(k['value']),
-            LBC_CONSTANT_NUMBER: lambda k: k['value'],
-            LBC_CONSTANT_TABLE: lambda k: k['value'],
-            LBC_CONSTANT_CLOSURE: lambda k: k['value'],
-            LBC_CONSTANT_VECTOR: lambda k: k['value'],
+            LBC_CONSTANT_BOOLEAN: lambda k: str(k["value"]).lower(),
+            LBC_CONSTANT_STRING: lambda k: repr(k["value"]),
+            LBC_CONSTANT_NUMBER: lambda k: k["value"],
+            LBC_CONSTANT_TABLE: lambda k: k["value"],
+            LBC_CONSTANT_CLOSURE: lambda k: k["value"],
+            LBC_CONSTANT_VECTOR: lambda k: k["value"],
         }
-        for i, k in enumerate(proto['kTable']):
-            value = constant_types.get(k['type'], lambda k: f"Unknown constant type: {k['type']}")(k)
+        for i, k in enumerate(proto["kTable"]):
+            value = constant_types.get(
+                k["type"], lambda k: f"Unknown constant type: {k['type']}"
+            )(k)
             output += f"{'    ' * depth}[{i}] = {value}\n"
 
-    if 'sizeProtos' in proto and proto['sizeProtos'] > 0:
+    if "sizeProtos" in proto and proto["sizeProtos"] > 0:
         output += "--< Protos >--\n"
-        for i, p in enumerate(proto['pTable']):
+        for i, p in enumerate(proto["pTable"]):
             output += f"{'    ' * depth}[{i}] = {read_proto(p, depth + 1, proto_table, string_table, luau_version)}\n"
 
-    if proto['numUpValues'] > 0:
+    if proto["numUpValues"] > 0:
         output += "--< Upvalues >--\n"
-        for i in range(proto['numUpValues']):
+        for i in range(proto["numUpValues"]):
             output += f"{'    ' * depth}[{i}] = Upvalue {i}\n"
 
     return output
@@ -641,7 +668,7 @@ def disassemble(bytecode: bytes) -> Tuple[List[str], List[str], int, str]:
     decompiled_output = []
 
     if bytecode[0] == 0:
-        return [bytecode[1:].decode('utf-8')], [], 0, "Luau Version Unknown"
+        return [bytecode[1:].decode("utf-8")], [], 0, "Luau Version Unknown"
 
     try:
         mainProto, protoTable, stringTable, LUAUVERSION = deserialize(bytecode)
@@ -666,6 +693,7 @@ def disassemble(bytecode: bytes) -> Tuple[List[str], List[str], int, str]:
 
     return output, decompiled_output, protos, LUAUVERSION
 
+
 def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
     # Removed redundant variables, fixed jumps and cleaned up the output - focat
     # its still shit btw LMAO but some what better
@@ -678,22 +706,22 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
 
     luau_op_table = getluauoptable()
     # opname_to_opcode = {info['name']: info['number'] for info in luau_op_table}
-    opcode_to_opname = {info['number']: info['name'] for info in luau_op_table}
+    opcode_to_opname = {info["number"]: info["name"] for info in luau_op_table}
 
     # def get_opcode(opname: str) -> int:
     #     return opname_to_opcode.get(opname, -1)
 
     def format_constant(k):
         if isinstance(k, dict):
-            if k['type'] == 3:  # String
-                return repr(k['value'])
-            elif k['type'] in [1, 2]:  # Number
-                return str(k['value'])
+            if k["type"] == 3:  # String
+                return repr(k["value"])
+            elif k["type"] in [1, 2]:  # Number
+                return str(k["value"])
             else:
-                return str(k['value'])
+                return str(k["value"])
         return str(k)
 
-    for code_index, i in enumerate(proto['codeTable']):
+    for code_index, i in enumerate(proto["codeTable"]):
         try:
             opc = GET_OPCODE(i)
             A = GETARG_A(i)
@@ -702,7 +730,11 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
             C = GETARG_C(i)
             sBx = GETARG_sBx(i)
             sAx = GETARG_sAx(i)
-            aux = proto['codeTable'][code_index + 1] if code_index + 1 < len(proto['codeTable']) else None
+            aux = (
+                proto["codeTable"][code_index + 1]
+                if code_index + 1 < len(proto["codeTable"])
+                else None
+            )
 
             opname = opcode_to_opname.get(opc, "UNKNOWN")
 
@@ -711,27 +743,41 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
             elif opname == "LOADB":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = {bool(B)}")
                 if C != 0:
-                    output.append(f"{add_tab_space(depth + 1)}goto [{code_index + 1 + C}]")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}goto [{code_index + 1 + C}]"
+                    )
             elif opname == "LOADN":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = {sBx}")
             elif opname == "LOADK":
-                if Bx < len(proto['kTable']):
-                    k = proto['kTable'][Bx]
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = {format_constant(k)}")
+                if Bx < len(proto["kTable"]):
+                    k = proto["kTable"][Bx]
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = {format_constant(k)}"
+                    )
                 else:
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = <invalid index {Bx}>")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = <invalid index {Bx}>"
+                    )
             elif opname == "MOVE":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = R{B}")
             elif opname == "GETGLOBAL":
                 if aux is not None and aux < len(stringTable):
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = _G[{repr(stringTable[aux])}]")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = _G[{repr(stringTable[aux])}]"
+                    )
                 else:
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = _G[Invalid string index]")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = _G[Invalid string index]"
+                    )
             elif opname == "SETGLOBAL":
                 if aux is not None and aux < len(stringTable):
-                    output.append(f"{add_tab_space(depth + 1)}_G[{repr(stringTable[aux])}] = R{A}")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}_G[{repr(stringTable[aux])}] = R{A}"
+                    )
                 else:
-                    output.append(f"{add_tab_space(depth + 1)}_G[Invalid string index] = R{A}")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}_G[Invalid string index] = R{A}"
+                    )
             elif opname == "GETUPVAL":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = U{B}")
             elif opname == "SETUPVAL":
@@ -739,21 +785,31 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
             elif opname == "CLOSEUPVALS":
                 output.append(f"{add_tab_space(depth + 1)}close upvalues R{A}+")
             elif opname == "GETIMPORT":
-                output.append(f"{add_tab_space(depth + 1)}R{A} = {proto['kTable'][Bx]['value']}")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = {proto['kTable'][Bx]['value']}"
+                )
             elif opname == "GETTABLE":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = R{B}[R{C}]")
             elif opname == "SETTABLE":
                 output.append(f"{add_tab_space(depth + 1)}R{B}[R{C}] = R{A}")
             elif opname == "GETTABLEKS":
                 if aux is not None and aux < len(stringTable):
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(stringTable[aux])}]")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(stringTable[aux])}]"
+                    )
                 else:
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = R{B}[Invalid string index]")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = R{B}[Invalid string index]"
+                    )
             elif opname == "SETTABLEKS":
                 if aux is not None and aux < len(stringTable):
-                    output.append(f"{add_tab_space(depth + 1)}R{B}[{repr(stringTable[aux])}] = R{A}")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{B}[{repr(stringTable[aux])}] = R{A}"
+                    )
                 else:
-                    output.append(f"{add_tab_space(depth + 1)}R{B}[Invalid string index] = R{A}")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{B}[Invalid string index] = R{A}"
+                    )
             elif opname == "GETTABLEN":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = R{B}[{C + 1}]")
             elif opname == "SETTABLEN":
@@ -762,9 +818,13 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
                 output.append(f"{add_tab_space(depth + 1)}R{A} = closure(proto[{Bx}])")
             elif opname == "NAMECALL":
                 if aux is not None and aux < len(stringTable):
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(stringTable[aux])}]; R{A+1} = R{B}")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(stringTable[aux])}]; R{A+1} = R{B}"
+                    )
                 else:
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = R{B}[Invalid string index]; R{A+1} = R{B}")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = R{B}[Invalid string index]; R{A+1} = R{B}"
+                    )
             elif opname == "CALL":
                 args = f"R{A+1}" + (f" ... R{A+C-1}" if C > 1 else "")
                 returns = f"R{A}" + (f" ... R{A+B-2}" if B > 1 else "")
@@ -777,33 +837,85 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
                 else:
                     output.append(f"{add_tab_space(depth + 1)}return R{A} ... R{A+B-2}")
             elif opname in ["JUMP", "JUMPBACK"]:
-                target = code_index + 1 + sBx if opname == "JUMP" else code_index + 1 - sBx
+                target = (
+                    code_index + 1 + sBx if opname == "JUMP" else code_index + 1 - sBx
+                )
                 target &= 0xFF
                 output.append(f"{add_tab_space(depth + 1)}goto [{target}]")
             elif opname in ["JUMPIF", "JUMPIFNOT"]:
                 condition = "" if opname == "JUMPIF" else "not "
-                output.append(f"{add_tab_space(depth + 1)}if {condition}R{A} then goto [{(code_index + 1 + sBx) & 0xFF}]")
-            elif opname in ["JUMPIFEQ", "JUMPIFLE", "JUMPIFLT", "JUMPIFNOTEQ", "JUMPIFNOTLE", "JUMPIFNOTLT"]:
+                output.append(
+                    f"{add_tab_space(depth + 1)}if {condition}R{A} then goto [{(code_index + 1 + sBx) & 0xFF}]"
+                )
+            elif opname in [
+                "JUMPIFEQ",
+                "JUMPIFLE",
+                "JUMPIFLT",
+                "JUMPIFNOTEQ",
+                "JUMPIFNOTLE",
+                "JUMPIFNOTLT",
+            ]:
                 op = {
-                    "JUMPIFEQ": "==", "JUMPIFLE": "<=", "JUMPIFLT": "<",
-                    "JUMPIFNOTEQ": "~=", "JUMPIFNOTLE": ">", "JUMPIFNOTLT": ">="
+                    "JUMPIFEQ": "==",
+                    "JUMPIFLE": "<=",
+                    "JUMPIFLT": "<",
+                    "JUMPIFNOTEQ": "~=",
+                    "JUMPIFNOTLE": ">",
+                    "JUMPIFNOTLT": ">=",
                 }[opname]
-                output.append(f"{add_tab_space(depth + 1)}if R{A} {op} {aux} then goto [{(code_index + 2 + sBx) & 0xFF}]")
-            elif opname in ["ADD", "SUB", "MUL", "DIV", "MOD", "POW", "ADDK", "SUBK", "MULK", "DIVK", "MODK", "POWK"]:
+                output.append(
+                    f"{add_tab_space(depth + 1)}if R{A} {op} {aux} then goto [{(code_index + 2 + sBx) & 0xFF}]"
+                )
+            elif opname in [
+                "ADD",
+                "SUB",
+                "MUL",
+                "DIV",
+                "MOD",
+                "POW",
+                "ADDK",
+                "SUBK",
+                "MULK",
+                "DIVK",
+                "MODK",
+                "POWK",
+            ]:
                 op = {
-                    "ADD": "+", "SUB": "-", "MUL": "*", "DIV": "/", "MOD": "%", "POW": "^",
-                    "ADDK": "+", "SUBK": "-", "MULK": "*", "DIVK": "/", "MODK": "%", "POWK": "^"
+                    "ADD": "+",
+                    "SUB": "-",
+                    "MUL": "*",
+                    "DIV": "/",
+                    "MOD": "%",
+                    "POW": "^",
+                    "ADDK": "+",
+                    "SUBK": "-",
+                    "MULK": "*",
+                    "DIVK": "/",
+                    "MODK": "%",
+                    "POWK": "^",
                 }[opname]
                 if opname.endswith("K"):
-                    k = proto['kTable'][C] if C < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} {op} {format_constant(k)}")
+                    k = (
+                        proto["kTable"][C]
+                        if C < len(proto["kTable"])
+                        else {"type": "nil", "value": "nil"}
+                    )
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = R{B} {op} {format_constant(k)}"
+                    )
                 else:
                     output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} {op} R{C}")
             elif opname in ["AND", "OR", "ANDK", "ORK"]:
                 op = "and" if opname.startswith("AND") else "or"
                 if opname.endswith("K"):
-                    k = proto['kTable'][C] if C < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} {op} {format_constant(k)}")
+                    k = (
+                        proto["kTable"][C]
+                        if C < len(proto["kTable"])
+                        else {"type": "nil", "value": "nil"}
+                    )
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = R{B} {op} {format_constant(k)}"
+                    )
                 else:
                     output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} {op} R{C}")
             elif opname == "NOT":
@@ -827,55 +939,97 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
             elif opname == "FASTCALL1":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = fastcall1({B}, R{C})")
             elif opname == "FASTCALL2":
-                output.append(f"{add_tab_space(depth + 1)}R{A} = fastcall2({B}, R{C}, {aux})")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = fastcall2({B}, R{C}, {aux})"
+                )
             elif opname == "FASTCALL2K":
-                k = proto['kTable'][aux] if aux < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                output.append(f"{add_tab_space(depth + 1)}R{A} = fastcall2k({B}, R{C}, {format_constant(k)})")
+                k = (
+                    proto["kTable"][aux]
+                    if aux < len(proto["kTable"])
+                    else {"type": "nil", "value": "nil"}
+                )
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = fastcall2k({B}, R{C}, {format_constant(k)})"
+                )
             elif opname == "FORGLOOP":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = forgloop(R{A}, {sBx})")
             elif opname == "FORGLOOP_INEXT":
-                output.append(f"{add_tab_space(depth + 1)}R{A} = forgloop_inext(R{A}, {sBx})")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = forgloop_inext(R{A}, {sBx})"
+                )
             elif opname == "FORGLOOP_NEXT":
-                output.append(f"{add_tab_space(depth + 1)}R{A} = forgloop_next(R{A}, {sBx})")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = forgloop_next(R{A}, {sBx})"
+                )
             elif opname == "FORGPREP":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = forgprep(R{A}, {sBx})")
             elif opname == "FORGPREP_INEXT":
-                output.append(f"{add_tab_space(depth + 1)}R{A} = forgprep_inext(R{A}, {sBx})")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = forgprep_inext(R{A}, {sBx})"
+                )
             elif opname == "FORGPREP_NEXT":
-                output.append(f"{add_tab_space(depth + 1)}R{A} = forgprep_next(R{A}, {sBx})")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = forgprep_next(R{A}, {sBx})"
+                )
             elif opname == "GETVARARGS":
-                output.append(f"{add_tab_space(depth + 1)}R{A}, ... = ..., ({B - 1} args)")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A}, ... = ..., ({B - 1} args)"
+                )
             elif opname == "DUPCLOSURE":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = dupclosure(K{Bx})")
             elif opname == "PREPVARARGS":
                 output.append(f"{add_tab_space(depth + 1)}prepare_varargs({A})")
             elif opname == "LOADKX":
                 if aux is not None:
-                    k = proto['kTable'][aux] if aux < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = {format_constant(k)}")
+                    k = (
+                        proto["kTable"][aux]
+                        if aux < len(proto["kTable"])
+                        else {"type": "nil", "value": "nil"}
+                    )
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = {format_constant(k)}"
+                    )
                 else:
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = <invalid constant>")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = <invalid constant>"
+                    )
             elif opname == "JUMPX":
-                output.append(f"{add_tab_space(depth + 1)}goto [{(code_index + 1 + sAx) & 0xFF}]")
+                output.append(
+                    f"{add_tab_space(depth + 1)}goto [{(code_index + 1 + sAx) & 0xFF}]"
+                )
             elif opname == "FASTCALL1":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = fastcall1({B}, R{C})")
             elif opname == "FASTCALL2":
                 if aux is not None:
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = fastcall2({B}, R{C}, R{aux})")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = fastcall2({B}, R{C}, R{aux})"
+                    )
                 else:
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = fastcall2({B}, R{C}, <invalid register>)")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = fastcall2({B}, R{C}, <invalid register>)"
+                    )
             elif opname == "FASTCALL2K":
                 if aux is not None:
-                    k = proto['kTable'][aux] if aux < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = fastcall2k({B}, R{C}, {format_constant(k)})")
+                    k = (
+                        proto["kTable"][aux]
+                        if aux < len(proto["kTable"])
+                        else {"type": "nil", "value": "nil"}
+                    )
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = fastcall2k({B}, R{C}, {format_constant(k)})"
+                    )
                 else:
-                    output.append(f"{add_tab_space(depth + 1)}R{A} = fastcall2k({B}, R{C}, <invalid constant>)")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}R{A} = fastcall2k({B}, R{C}, <invalid constant>)"
+                    )
             elif opname == "NEWTABLE":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = {{}}")
             elif opname == "DUPTABLE":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = {{}}")
             elif opname == "SETLIST":
-                output.append(f"{add_tab_space(depth + 1)}R{A}[{B}] = R{A+1} ... R{A+C}")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A}[{B}] = R{A+1} ... R{A+C}"
+                )
             elif opname == "CAPTURE":
                 if A == 0:
                     output.append(f"{add_tab_space(depth + 1)}capture(upvalue, R{B})")
@@ -892,33 +1046,61 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
             elif opname == "FORGLOOP":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = forgloop(R{A}, {sBx})")
             elif opname == "FORGPREP_NEXT":
-                output.append(f"{add_tab_space(depth + 1)}R{A} = forgprep_next(R{A}, {sBx})")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = forgprep_next(R{A}, {sBx})"
+                )
             elif opname == "FORGPREP_INEXT":
-                output.append(f"{add_tab_space(depth + 1)}R{A} = forgprep_inext(R{A}, {sBx})")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = forgprep_inext(R{A}, {sBx})"
+                )
             elif opname == "FORGLOOP_NEXT":
-                output.append(f"{add_tab_space(depth + 1)}R{A} = forgloop_next(R{A}, {sBx})")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = forgloop_next(R{A}, {sBx})"
+                )
             elif opname == "FORGLOOP_INEXT":
-                output.append(f"{add_tab_space(depth + 1)}R{A} = forgloop_inext(R{A}, {sBx})")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = forgloop_inext(R{A}, {sBx})"
+                )
             elif opname == "GETVARARGS":
-                output.append(f"{add_tab_space(depth + 1)}R{A}, ... = ..., ({B - 1} args)")
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A}, ... = ..., ({B - 1} args)"
+                )
             elif opname == "JUMPX":
-                output.append(f"{add_tab_space(depth + 1)}goto [{(code_index + 1 + sAx) & 0xFF}]")
+                output.append(
+                    f"{add_tab_space(depth + 1)}goto [{(code_index + 1 + sAx) & 0xFF}]"
+                )
             elif opname == "JUMPXEQKNIL":
-                output.append(f"{add_tab_space(depth + 1)}if R{A} == nil then goto [{(code_index + 1 + sAx) & 0xFF}]")
+                output.append(
+                    f"{add_tab_space(depth + 1)}if R{A} == nil then goto [{(code_index + 1 + sAx) & 0xFF}]"
+                )
             elif opname == "JUMPXEQKB":
-                output.append(f"{add_tab_space(depth + 1)}if R{A} == {bool(Bx)} then goto [({code_index + 1 + sAx & 0xFF})]")
+                output.append(
+                    f"{add_tab_space(depth + 1)}if R{A} == {bool(Bx)} then goto [({code_index + 1 + sAx & 0xFF})]"
+                )
             elif opname == "JUMPXEQKN":
-                output.append(f"{add_tab_space(depth + 1)}if R{A} == {aux} then goto [{(code_index + 2 + sAx) & 0xFF}]")
+                output.append(
+                    f"{add_tab_space(depth + 1)}if R{A} == {aux} then goto [{(code_index + 2 + sAx) & 0xFF}]"
+                )
             elif opname == "JUMPXEQKS":
                 if aux is not None and aux < len(stringTable):
-                    output.append(f"{add_tab_space(depth + 1)}if R{A} == {repr(stringTable[aux])} then goto [{(code_index + 2 + sAx) & 0xFF}]")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}if R{A} == {repr(stringTable[aux])} then goto [{(code_index + 2 + sAx) & 0xFF}]"
+                    )
                 else:
-                    output.append(f"{add_tab_space(depth + 1)}if R{A} == <invalid string> then goto [{(code_index + 2 + sAx) & 0xFF}]")
+                    output.append(
+                        f"{add_tab_space(depth + 1)}if R{A} == <invalid string> then goto [{(code_index + 2 + sAx) & 0xFF}]"
+                    )
             elif opname == "IDIV":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} // R{C}")
             elif opname == "IDIVK":
-                k = proto['kTable'][C] if C < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} // {format_constant(k)}")
+                k = (
+                    proto["kTable"][C]
+                    if C < len(proto["kTable"])
+                    else {"type": "nil", "value": "nil"}
+                )
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = R{B} // {format_constant(k)}"
+                )
             elif opname == "BAND":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} & R{C}")
             elif opname == "BOR":
@@ -932,14 +1114,32 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
             elif opname == "SHR":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} >> R{C}")
             elif opname == "BANDK":
-                k = proto['kTable'][C] if C < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} & {format_constant(k)}")
+                k = (
+                    proto["kTable"][C]
+                    if C < len(proto["kTable"])
+                    else {"type": "nil", "value": "nil"}
+                )
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = R{B} & {format_constant(k)}"
+                )
             elif opname == "BORK":
-                k = proto['kTable'][C] if C < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} | {format_constant(k)}")
+                k = (
+                    proto["kTable"][C]
+                    if C < len(proto["kTable"])
+                    else {"type": "nil", "value": "nil"}
+                )
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = R{B} | {format_constant(k)}"
+                )
             elif opname == "BXORK":
-                k = proto['kTable'][C] if C < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} ~ {format_constant(k)}")
+                k = (
+                    proto["kTable"][C]
+                    if C < len(proto["kTable"])
+                    else {"type": "nil", "value": "nil"}
+                )
+                output.append(
+                    f"{add_tab_space(depth + 1)}R{A} = R{B} ~ {format_constant(k)}"
+                )
             elif opname == "SHLI":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = R{B} << {C}")
             elif opname == "SHRI":
@@ -964,17 +1164,20 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
             else:
                 output.append(f"{add_tab_space(depth + 1)}UNKNOWN OPCODE: {opname}")
         except Exception as e:
-            output.append(f"{add_tab_space(depth + 1)}Error processing opcode: {str(e)}")
+            output.append(
+                f"{add_tab_space(depth + 1)}Error processing opcode: {str(e)}"
+            )
 
     output.append("end")
     return "\n".join(output)
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python disassembler.py <bytecode_file>")
         sys.exit(1)
 
-    with open(sys.argv[1], 'rb') as f:
+    with open(sys.argv[1], "rb") as f:
         bytecode = f.read()
 
     start = time.perf_counter()
@@ -988,7 +1191,7 @@ if __name__ == "__main__":
     disassembled_extra += f"--<@ Time taken: {end - start:.6f}s @>--\n"
     disassembled_str = "\n".join(disassembled)
     full_output = disassembled_extra + disassembled_str
-    with open('output.txt', 'w', encoding='utf-8') as f:
+    with open("output.txt", "w", encoding="utf-8") as f:
         f.write(full_output)
     print(f"Disassembled bytecode in {end - start:.6f}s")
     flattened_decompiled = []
@@ -998,6 +1201,6 @@ if __name__ == "__main__":
         else:
             flattened_decompiled.append(item)
     decompiled_str = "\n".join(flattened_decompiled)
-    with open('decompiled.luau', 'w', encoding='utf-8') as f:
+    with open("decompiled.luau", "w", encoding="utf-8") as f:
         f.write(decompiled_str)
     print("Decompiled disassembly")
