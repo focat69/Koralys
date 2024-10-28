@@ -652,14 +652,15 @@ def read_proto(
         }
 
         for gen_op_name in ["ADD", "SUB", "MUL", "DIV", "MOD", "POW"]:
-            op = {
+            ops = {
                 "ADD": "+", "SUB": "-", "MUL": "*",
                 "DIV": "/", "MOD": "%", "POW": "^"
             }
-            opcode_handlers[gen_op_name] = lambda opcode: f"R{A} = R{B} {op[opcode]} R{C}"
-            def __gen_op_handler():
+            opcode_handlers[gen_op_name] = lambda opcode: f"R{A} = R{B} {ops[opcode]} R{C}"
+            def __gen_op_handler(opcode):
+                op = ops[opcode[:-1]]
                 k = proto['kTable'][C] if C < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                return f"R{A} = R{B} {op} {repr(k['value']) if isinstance(k['value'], str) else k['value']}"
+                return f"R{A} = R{B} {ops[opcode]} {repr(k['value']) if isinstance(k['value'], str) else k['value']}"
             opcode_handlers[f"{gen_op_name}K"] = __gen_op_handler
 
         if op_name in opcode_handlers:
