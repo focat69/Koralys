@@ -499,7 +499,10 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
             returns = f"R{A}" + (f" ... R{A+B-2}" if B > 1 else "")
             return f"{returns} = R{A}({args})"
 
-        def jump_if_gen(op: str | None = None, invert: bool = False):
+        def jump_if_gen(
+             op: str | None = None,
+             invert: bool = False
+        ):
             pre_op = invert and "not " or " "
             jump = opcode_handlers["JUMP"]()
             after_cond = op and f"{op} {aux}" or ""
@@ -511,83 +514,83 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
             "LOADN": lambda: f"R{A} = {Bx}",
             "MOVE": lambda: f"R{A} = R{B}",
             "GETGLOBAL":
-                	lambda:
-                     	f"R{A} = _G[{repr(string_table[aux])}]"
-                      	if aux is not None and aux < len(string_table)
+                    lambda:
+                         f"R{A} = _G[{repr(string_table[aux])}]"
+                          if aux is not None and aux < len(string_table)
                         else f"R{A} = _G[Invalid string index]",
             "SETGLOBAL":
-            	lambda:
-             		f"_G[{repr(string_table[aux])}"
-               		if aux is not None and aux < len(string_table)
-                 	else f"_G[Invalid string index] = R{A}",
+                lambda:
+                     f"_G[{repr(string_table[aux])}"
+                       if aux is not None and aux < len(string_table)
+                     else f"_G[Invalid string index] = R{A}",
             "GETUPVAL":
-            	lambda:
-             		f"R{A} = U{B}",
+                lambda:
+                     f"R{A} = U{B}",
             "SETUPVAL":
-            	lambda:
-             		f"U{B} = R{A}",
+                lambda:
+                     f"U{B} = R{A}",
             "CLOSEUPVALS":
-            	lambda:
-             		f"close upvalues R{A}+",
+                lambda:
+                     f"close upvalues R{A}+",
             "GETIMPORT":
-            	lambda:
-             		f"R{A} = {proto['kTable'][Bx]['value']}",
+                lambda:
+                     f"R{A} = {proto['kTable'][Bx]['value']}",
             "GETTABLE":
-            	lambda:
-             		f"R{A} = R{B}[R{C}]",
+                lambda:
+                     f"R{A} = R{B}[R{C}]",
             "SETTABLE":
-            	lambda:
-             		f"R{A} = R{B}[R{C}]",
+                lambda:
+                     f"R{A} = R{B}[R{C}]",
             "GETTABLEKS":
-            	lambda:
-             		f"R{A} = R{B}[{repr(string_table[aux])}"
-               		if aux is not None and aux < len(string_table)
-                 	else f"R{A} = R{B}[Invalid string index]",
+                lambda:
+                     f"R{A} = R{B}[{repr(string_table[aux])}"
+                       if aux is not None and aux < len(string_table)
+                     else f"R{A} = R{B}[Invalid string index]",
             "SETTABLEKS":
-            	lambda:
-             		f"R{B}[{repr(string_table[aux])} = R{A}"
-               		if aux is not None and aux < len(string_table)
-                 	else f"R{B}[Invalid string index] = R{A}",
+                lambda:
+                     f"R{B}[{repr(string_table[aux])} = R{A}"
+                       if aux is not None and aux < len(string_table)
+                     else f"R{B}[Invalid string index] = R{A}",
             "GETTABLEN":
-            	lambda:
-             		f"R{A} = R{B}[{C + 1}]",
+                lambda:
+                     f"R{A} = R{B}[{C + 1}]",
             "SETTABLEN":
-            	lambda:
-             		f"R{B}[{C + 1}] = R{A}",
+                lambda:
+                     f"R{B}[{C + 1}] = R{A}",
             "NEWCLOSURE":
-            	lambda:
-             		f"R{A} = closure(proto[{Bx}])",
+                lambda:
+                     f"R{A} = closure(proto[{Bx}])",
             "NAMECALL":
-            	lambda:
-             		f"R{A} = R{B}[{repr(string_table[aux])}; R{A+1} = R{B}"
-               		if aux is not None and aux < len(string_table)
-                 	else f"R{A} = R{B}[Invalid String Index]; R{A+1} = R{B}",
+                lambda:
+                     f"R{A} = R{B}[{repr(string_table[aux])}; R{A+1} = R{B}"
+                       if aux is not None and aux < len(string_table)
+                     else f"R{A} = R{B}[Invalid String Index]; R{A+1} = R{B}",
             "CALL": __CALL_handler,
             "RETURN":
-            	lambda:
-             		f"return R{A} ..."
-               		if B == 0
-                 	else "return"
-                  		if B == 1
-                    	else f"return R{A} ... R{A+B-2}",
+                lambda:
+                     f"return R{A} ..."
+                       if B == 0
+                     else "return"
+                          if B == 1
+                        else f"return R{A} ... R{A+B-2}",
             "JUMP":
-            	lambda:
-             		f"goto [{(codeIndex + 1 + sBx) & 0xFF}]",
+                lambda:
+                     f"goto [{(codeIndex + 1 + sBx) & 0xFF}]",
             "JUMPBACK":
-            	lambda:
-             		f"goto [{(codeIndex + 1 - sBx) & 0xFF}]",
+                lambda:
+                     f"goto [{(codeIndex + 1 - sBx) & 0xFF}]",
             "JUMPIF":
-            	lambda:
-             		jump_if_gen(),
+                lambda:
+                     jump_if_gen(),
             "JUMPIFNOT":
-            	lambda:
-             		jump_if_gen(None, True),
+                lambda:
+                     jump_if_gen(None, True),
             "JUMPIFEQ":
-            	lambda:
-             		jump_if_gen("=="),
+                lambda:
+                     jump_if_gen("=="),
             "JUMPIFLE":
-            	lambda:
-             		jump_if_gen("<=")
+                lambda:
+                     jump_if_gen("<=")
         }
         if opname in opcode_handlers:
             output += opcode_handlers[opname]()
