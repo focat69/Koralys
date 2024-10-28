@@ -604,6 +604,7 @@ def read_proto(
             "LOADB": lambda: f"R{A} = {bool(B)}; "
             + (f"goto [{codeIndex + C + 1}]" if C != 0 else ""),
             "LOADN": lambda: f"R{A} = {Bx}",
+            "LOADK": lambda: f"R{A} = {Bx}",
             "MOVE": lambda: f"R{A} = R{B}",
             "GETGLOBAL": lambda: f"R{A} = _G[{repr(string_table[aux])}]"
             if aux is not None and aux < len(string_table)
