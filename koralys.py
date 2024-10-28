@@ -568,8 +568,8 @@ def read_proto(
             codeIndex += 1
 
         def __CALL_handler():
-            args = f"R{A+1}" + (f" ... R{A+C-1}" if C > 1 else "")
-            returns = f"R{A}" + (f" ... R{A+B-2}" if B > 1 else "")
+            args = f"R{A+1}" + (f" ... R{A+B-1}" if B > 2 else "")
+            returns = f"R{A}" + (f" ... R{A+C}" if C > 1 else "")
             return f"{returns} = R{A}({args})"
 
         def __CAPTURE_handler():
