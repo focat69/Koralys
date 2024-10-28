@@ -578,6 +578,22 @@ def read_proto(
             return f"capture {capture_type} R{B}"
 
         def jump_if_gen(op: str | None = None, invert: bool = False, k_mode: bool = False):
+            """Generates a conditional jump statement based on the provided operation.
+
+            This function constructs a string representing a conditional jump in a specific format, 
+            allowing for optional inversion of the condition and handling of auxiliary values. 
+            The generated statement can be used in bytecode or intermediate representations.
+
+            Args:
+                op (str | None): The operator to include in the condition, or None for no operator.
+                invert (bool): If True, inverts the condition in the generated statement.
+                k_mode (bool): If True, appends `K` before the index,
+                               use this with operations like `JUMPIFEQK`,
+                               usually where the operation ends in `K`.
+
+            Returns:
+                str: A formatted string representing the conditional jump statement.
+            """
             pre_op = invert and " not " or " "
             jump = opcode_handlers["JUMP"]()
             after_cond = op and f" {op} {k_mode and f"K{aux}" or aux} " or " "
