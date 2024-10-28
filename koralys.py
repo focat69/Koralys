@@ -46,6 +46,7 @@ def debug(*args, **kwargs):
 
 
 # < CONSTANT TYPES > #
+# https://github.com/luau-lang/luau/blob/db809395bf5739c895a24dc73960b9e9ab6468c5/Compiler/include/Luau/BytecodeBuilder.h#L151-L161
 LBC_CONSTANT_NIL = 0
 LBC_CONSTANT_BOOLEAN = 1
 LBC_CONSTANT_NUMBER = 2
@@ -511,6 +512,9 @@ def GETARG_B(i: int) -> int:
 def GETARG_C(i: int) -> int:
     return (i >> 24) & 0xFF
 
+# def GETARG_D(i: int) -> int:
+#     d = (i >> 16) & 0xFFFF  # Extract 16 bits for D
+#     return d - 0x10000 if d & 0x8000 else d  # Convert to signed
 
 def GETARG_Bx(i: int) -> int:
     return i >> 16
@@ -578,6 +582,34 @@ def read_proto(
             capture_type = capture_types[A] if A < len(capture_types) else f"Unknown({A})"
             return f"capture {capture_type} R{B}"
 
+        def __GETIMPORT_handler(_):
+            # https://github.com/luau-lang/luau/blob/0.631/Compiler/src/BytecodeBuilder.cpp#L913-L920
+            # 100% not just ported to python
+            def decompose_import_id(ids: int) -> tuple[int, List[int]]:
+                count = ids >> 30
+                id1 = (ids >> 20) & 1023 if count > 0 else None
+                id2 = (ids >> 10) & 1023 if count > 1 else None
+                id3 = ids & 1023 if count > 2 else None
+
+                return count, [x for x in [id1, id2, id3] if x is not None]
+
+            def import_id_to_name(ids: int) -> str:
+                imported_path = ""
+                _, ids = decompose_import_id(ids)
+
+                for i, id_constant in enumerate(ids):
+                    id_constant = proto["kTable"][id_constant]
+                    assert (
+                        id_constant["type"] == LBC_CONSTANT_STRING
+                    ), f"ID Constant {i} ({id_constant}) isn't a string."
+                    imported_path = imported_path.join(id_constant["value"])
+
+                return imported_path
+            import_id = proto["kTable"][Bx]["value"]
+            imported_path = import_id_to_name(import_id)
+            # todo: this is horrible lol
+            return f"R{A} = {imported_path} -- Import ID: {import_id}"
+
         def jump_if_gen(op: str | None = None, invert: bool = False, k_mode: bool = False):
             """Generates a conditional jump statement based on the provided operation.
 
@@ -616,7 +648,7 @@ def read_proto(
             "GETUPVAL": lambda _: f"R{A} = U{B}",
             "SETUPVAL": lambda _: f"U{B} = R{A}",
             "CLOSEUPVALS": lambda _: f"close upvalues R{A}+",
-            "GETIMPORT": lambda _: f"R{A} = {proto['kTable'][Bx]['value']}",
+            "GETIMPORT": __GETIMPORT_handler,
             "GETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
             "SETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
             "GETTABLEKS": lambda _: f"R{A} = R{B}[{repr(string_table[aux])}"
