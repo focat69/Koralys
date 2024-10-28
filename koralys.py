@@ -218,11 +218,12 @@ def deserialize_v5(
         proto["lineDefined"] = reader.nextVarInt()
 
         protoSourceId = reader.nextVarInt()
-        if protoSourceId >= len(string_table):
+        if protoSourceId > len(string_table):
             raise IndexError(
                 f"Index {protoSourceId} out of range for stringTable with length {len(string_table)}"
             )
-        proto["source"] = string_table[protoSourceId]
+        if protoSourceId < len(string_table):
+            proto["source"] = string_table[protoSourceId]
 
         if reader.nextByte() == 1:  # has line info?
             compKey = reader.nextByte()
