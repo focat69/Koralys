@@ -520,7 +520,7 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
                         else f"R{A} = _G[Invalid string index]",
             "SETGLOBAL":
                 lambda:
-                     f"_G[{repr(string_table[aux])}"
+                     f"_G[{repr(string_table[aux])}]"
                        if aux is not None and aux < len(string_table)
                      else f"_G[Invalid string index] = R{A}",
             "GETUPVAL":
