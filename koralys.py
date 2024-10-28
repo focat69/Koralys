@@ -487,11 +487,11 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
         sBx = GETARG_sBx(i)
         sAx = GETARG_sAx(i)
 
-        opname = opcodeToOpname.get(opc, "UNKNOWN")
-        output += f"{'    ' * depth}[{codeIndex:03}] {opname:<{max_opname_length}} "
+        op_name = opcodeToOpname.get(opc, "UNKNOWN")
+        output += f"{'    ' * depth}[{codeIndex:03}] {op_name:<{max_opname_length}} "
 
         aux = None
-        if any(info['name'] == opname and info.get('aux', False) for info in luauOpTable) and codeIndex + 1 < len(proto['codeTable']):
+        if any(info['name'] == op_name and info.get('aux', False) for info in luauOpTable) and codeIndex + 1 < len(proto['codeTable']):
             aux = proto['codeTable'][codeIndex + 1]
             codeIndex += 1
         def __CALL_handler():
@@ -503,10 +503,10 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
              op: str | None = None,
              invert: bool = False
         ):
-            pre_op = invert and "not " or " "
+            pre_op = invert and " not " or " "
             jump = opcode_handlers["JUMP"]()
-            after_cond = op and f"{op} {aux}" or ""
-            return f"if {pre_op}R{A} {after_cond} then {jump}"
+            after_cond = op and f" {op} {aux} " or " "
+            return f"if{pre_op}R{A}{after_cond}then {jump}"
 
         opcode_handlers = {
             "LOADNIL": lambda: f"R{A} = nil",
@@ -596,10 +596,10 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
 					 jump_if_gen("<=", True),
             "JUMPIFNOTLT":
 				lambda:
-					 jump_if_gen("<", True)
+					 jump_if_gen("<", True),
         }
-        if opname in opcode_handlers:
-            output += opcode_handlers[opname]()
+        if op_name in opcode_handlers:
+            output += opcode_handlers[op_name]()
         else:
             output += f"Unknown opcode: {opc}"
 
