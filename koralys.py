@@ -590,7 +590,13 @@ def read_proto(proto: Dict[str, Any], depth: int, proto_table: List[Dict[str, An
                      jump_if_gen("=="),
             "JUMPIFLE":
                 lambda:
-                     jump_if_gen("<=")
+                     jump_if_gen("<="),
+			"JUMPIFNOTLE":
+				lambda:
+					 jump_if_gen("<=", True),
+            "JUMPIFNOTLT":
+				lambda:
+					 jump_if_gen("<", True)
         }
         if opname in opcode_handlers:
             output += opcode_handlers[opname]()
