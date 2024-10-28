@@ -660,7 +660,7 @@ def read_proto(
             def __gen_op_handler(opcode):
                 op = ops[opcode[:-1]]
                 k = proto['kTable'][C] if C < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
-                return f"R{A} = R{B} {ops[opcode]} {repr(k['value']) if isinstance(k['value'], str) else k['value']}"
+                return f"R{A} = R{B} {op} {repr(k['value']) if isinstance(k['value'], str) else k['value']}"
             opcode_handlers[f"{gen_op_name}K"] = __gen_op_handler
 
         if op_name in opcode_handlers:
