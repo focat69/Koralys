@@ -572,6 +572,11 @@ def read_proto(
             returns = f"R{A}" + (f" ... R{A+B-2}" if B > 1 else "")
             return f"{returns} = R{A}({args})"
 
+        def __CAPTURE_handler():
+            capture_types = ["VAL", "REF", "UPVAL"]
+            capture_type = capture_types[A] if A < len(capture_types) else f"Unknown({A})"
+            return f"capture {capture_type} R{B}"
+
         def jump_if_gen(op: str | None = None, invert: bool = False):
             pre_op = invert and " not " or " "
             jump = opcode_handlers["JUMP"]()
@@ -622,7 +627,10 @@ def read_proto(
             "JUMPIFLE": lambda: jump_if_gen("<="),
             "JUMPIFNOTLE": lambda: jump_if_gen("<=", True),
             "JUMPIFNOTLT": lambda: jump_if_gen("<", True),
-            "JUMPX": lambda: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]"
+            "JUMPX": lambda: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]",
+            "FASTCALL": lambda: f"R{A} = builtin[{C}]",
+            "COVERAGE": lambda: "(coverage)",
+            "CAPTURE": __CAPTURE_handler
         }
         if op_name in opcode_handlers:
             output += opcode_handlers[op_name]()
