@@ -622,6 +622,7 @@ def read_proto(
             "JUMPIFLE": lambda: jump_if_gen("<="),
             "JUMPIFNOTLE": lambda: jump_if_gen("<=", True),
             "JUMPIFNOTLT": lambda: jump_if_gen("<", True),
+            "JUMPX": lambda: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]"
         }
         if op_name in opcode_handlers:
             output += opcode_handlers[op_name]()
