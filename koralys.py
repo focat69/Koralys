@@ -650,6 +650,18 @@ def read_proto(
             "CAPTURE": __CAPTURE_handler,
             "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True)
         }
+
+        for gen_op_name in ["ADD", "SUB", "MUL", "DIV", "MOD", "POW"]:
+            op = {
+                "ADD": "+", "SUB": "-", "MUL": "*",
+                "DIV": "/", "MOD": "%", "POW": "^"
+            }
+            opcode_handlers[gen_op_name] = lambda opcode: f"R{A} = R{B} {op[opcode]} R{C}"
+            def __gen_op_handler():
+                k = proto['kTable'][C] if C < len(proto['kTable']) else {'type': "nil", 'value': "nil"}
+                return f"R{A} = R{B} {op} {repr(k['value']) if isinstance(k['value'], str) else k['value']}"
+            opcode_handlers[f"{gen_op_name}K"] = __gen_op_handler
+
         if op_name in opcode_handlers:
             output += opcode_handlers[op_name](op_name)
         else:
