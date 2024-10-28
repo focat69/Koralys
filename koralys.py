@@ -631,7 +631,7 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
     def add_tab_space(depth):
         return "    " * depth
 
-    output.append(f"local function func{depth}()")
+    output.append(f"local function func{depth}({proto["isVarArg"] and '...' or ''})")
 
     # opname_to_opcode = {info['name']: info['number'] for info in luau_op_table}
     opcode_to_opname = {info["number"]: info["name"] for info in OP_TABLE}
@@ -906,7 +906,7 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
             elif opname == "DUPCLOSURE":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = dupclosure(K{Bx})")
             elif opname == "PREPVARARGS":
-                output.append(f"{add_tab_space(depth + 1)}prepare_varargs({A})")
+                pass
             elif opname == "LOADKX":
                 if aux is not None:
                     k = (
