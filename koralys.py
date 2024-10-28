@@ -679,8 +679,9 @@ def read_proto(
         constant_types = {
             LBC_CONSTANT_NIL: "nil",
             LBC_CONSTANT_BOOLEAN: lambda k: str(k["value"]).lower(),
-            LBC_CONSTANT_STRING: lambda k: repr(k["value"]),
             LBC_CONSTANT_NUMBER: lambda k: k["value"],
+            LBC_CONSTANT_STRING: lambda k: repr(k["value"]),
+            LBC_CONSTANT_IMPORT: lambda k: k["value"],
             LBC_CONSTANT_TABLE: lambda k: k["value"],
             LBC_CONSTANT_CLOSURE: lambda k: k["value"],
             LBC_CONSTANT_VECTOR: lambda k: k["value"],
