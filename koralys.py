@@ -406,15 +406,15 @@ def read_proto(
 
     output += f"{tab_space}function({', '.join(['...' if proto['isVarArg'] else ''] + [f'R{i}' for i in range(proto['numParams'])])})\n"
 
-    opnameToOpcode = {info["name"]: info["number"] for info in OP_TABLE}
+    # opnameToOpcode = {info["name"]: info["number"] for info in OP_TABLE}
     opcodeToOpname = {info["number"]: info["name"] for info in OP_TABLE}
     max_opname_length = max(len(info["name"]) for info in OP_TABLE)
 
-    def get_opcode(opname: str) -> int:
-        opcode = opnameToOpcode.get(opname)
-        if opcode is None:
-            raise ValueError(f"Unknown opname {opname}")
-        return opcode
+    # def get_opcode_from_name(opname: str) -> int:
+    #     opcode = opnameToOpcode.get(opname)
+    #     if opcode is None:
+    #         raise ValueError(f"Unknown opname {opname}")
+    #     return opcode
 
     codeIndex = 0
     while codeIndex < len(proto["codeTable"]):
