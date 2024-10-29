@@ -118,15 +118,15 @@ def get_opcode(i: int) -> int:
     return (i * 227) & 0xFF
 
 
-def GETARG_A(i: int) -> int:
+def get_arg_a(i: int) -> int:
     return (i >> 8) & 0xFF
 
 
-def GETARG_B(i: int) -> int:
+def get_arg_b(i: int) -> int:
     return (i >> 16) & 0xFF
 
 
-def GETARG_C(i: int) -> int:
+def get_arg_c(i: int) -> int:
     return (i >> 24) & 0xFF
 
 
@@ -135,13 +135,13 @@ def GETARG_C(i: int) -> int:
 #     return d - 0x10000 if d & 0x8000 else d  # Convert to signed
 
 
-def GETARG_Bx(i: int) -> int:
+def get_arg_Bx(i: int) -> int:
     return i >> 16
 
 
-def GETARG_sBx(i: int) -> int:
+def get_arg_sBx(i: int) -> int:
     return (i >> 16) - 131071
 
 
-def GETARG_sAx(i: int) -> int:
+def get_arg_sAx(i: int) -> int:
     return i >> 8
