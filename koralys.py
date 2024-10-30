@@ -199,7 +199,7 @@ def parse_proto(
 
     size_consts = reader.nextVarInt()
     debug(f"  Number of constants: {size_consts}")
-    proto["kTable"] = [parse_constant(reader, string_table) for _ in range(size_consts)]
+    proto["kTable"] = [parse_constant(reader) for _ in range(size_consts)]
 
     size_protos = reader.nextVarInt()
     debug(f"  Number of child protos: {size_protos}")
@@ -225,7 +225,7 @@ def parse_proto(
     return proto
 
 
-def parse_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
+def parse_constant(reader: Reader) -> Dict[str, Any]:
     try:
         k = {"type": reader.nextByte()}
         constant_handlers = {
