@@ -406,7 +406,7 @@ def read_proto(
             """
             pre_op = invert and " not " or " "
             jump = opcode_handlers["JUMP"]("JUMP")
-            after_cond = op and f" {op} {k_mode and f"K{aux}" or aux} " or " "
+            after_cond = op and f" {op} {k_mode and f'K{aux}' or aux} " or " "
             return f"if{pre_op}R{A}{after_cond}then {jump}"
 
         opcode_handlers = {
@@ -572,7 +572,7 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
     def add_tab_space(depth):
         return "    " * depth
 
-    output.append(f"local function func{depth}({proto["isVarArg"] and '...' or ''})")
+    output.append(f"local function func{depth}({proto['isVarArg'] and '...' or ''})")
 
     # opname_to_opcode = {info['name']: info['number'] for info in luau_op_table}
     opcode_to_opname = {info["number"]: info["name"] for info in OP_TABLE}
