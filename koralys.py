@@ -406,7 +406,7 @@ def read_proto(
             return f"if{pre_op}R{A}{after_cond}then {jump}"
 
         opcode_handlers = {
-            "PREPVARARGS": lambda _: "",
+            "PREPVARARGS": lambda _: f"(adjust vararg params, {A} fixed params)",
             "LOADNIL": lambda _: f"R{A} = nil",
             "LOADB": lambda _: f"R{A} = {bool(B)}; "
             + (f"goto [{codeIndex + C + 1}]" if C != 0 else ""),
