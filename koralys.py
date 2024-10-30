@@ -373,7 +373,11 @@ def read_proto(
                     assert (
                         id_constant["type"] == LBC_CONSTANT_STRING
                     ), f"ID Constant {i} ({id_constant}) isn't a string."
-                    imported_path = imported_path.join(id_constant["value"])
+                    to_append = i > 0 and f".{id_constant['value']}" or id_constant["value"]
+                    # kinda ew but it works
+                    # also slow but I don't care lol
+                    # this is Python, what do you expect?
+                    imported_path += to_append
 
                 return imported_path
 
