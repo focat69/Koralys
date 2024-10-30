@@ -388,7 +388,6 @@ def read_proto(
 
             import_id = proto["kTable"][Bx]["value"]
             imported_path = import_id_to_name(import_id)
-            # todo: this is horrible lol
             return f"R{A} = {imported_path} -- Import ID: {import_id}"
 
         def jump_if_gen(
