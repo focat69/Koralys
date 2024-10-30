@@ -66,7 +66,6 @@ LBC_CONSTANT_TABLE = 5
 LBC_CONSTANT_CLOSURE = 6
 LBC_CONSTANT_VECTOR = 7
 
-# TODO: fix sourcery code quality issues (currently 12%)
 def deserialize_v5(
     reader: Reader,
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
@@ -82,86 +81,11 @@ def deserialize_v5(
     size_strings = reader.nextVarInt()
     string_table.extend(reader.nextString() for _ in range(size_strings))
     size_protos = reader.nextVarInt()
-    proto_table.extend(
-        {
-            "codeTable": [],
-            "kTable": [],
-            "pTable": [],
-            "smallLineInfo": [],
-            "largeLineInfo": [],
-        }
-        for _ in range(size_protos)
-    )
+    proto_table.extend(create_empty_proto() for _ in range(size_protos))
+
     for i in range(size_protos):
         proto = proto_table[i]
-        proto["maxStackSize"] = reader.nextByte()
-        proto["numParams"] = reader.nextByte()
-        proto["numUpValues"] = reader.nextByte()
-        proto["isVarArg"] = reader.nextByte()
-
-        proto["flags"] = reader.nextByte()
-        typesize = reader.nextVarInt()
-        proto["typeInfo"] = [reader.nextByte() for _ in range(typesize)]
-
-        proto["sizeCode"] = reader.nextVarInt()
-        for _ in range(proto["sizeCode"]):
-            proto["codeTable"].append(reader.nextInt())
-
-        proto["sizeConsts"] = reader.nextVarInt()
-        for _ in range(proto["sizeConsts"]):
-            k = {"type": reader.nextByte()}
-            if k["type"] == LBC_CONSTANT_BOOLEAN:
-                k["value"] = reader.nextByte() == 1
-            elif k["type"] == LBC_CONSTANT_NUMBER:
-                k["value"] = reader.nextDouble()
-            elif k["type"] == LBC_CONSTANT_STRING:
-                index = reader.nextVarInt()
-                adjusted_index = index - 1
-                if 0 <= adjusted_index < len(string_table):
-                    k["value"] = string_table[adjusted_index]
-                else:
-                    k["value"] = "Invalid string index"
-            elif k["type"] == LBC_CONSTANT_IMPORT:
-                k["value"] = reader.nextInt()
-            elif k["type"] == LBC_CONSTANT_TABLE:
-                k["value"] = {"size": reader.nextVarInt(), "ids": []}
-                for _ in range(k["value"]["size"]):
-                    k["value"]["ids"].append(reader.nextVarInt() + 1)
-            elif k["type"] == LBC_CONSTANT_CLOSURE:
-                k["value"] = reader.nextVarInt() + 1
-            elif k["type"] == LBC_CONSTANT_VECTOR:
-                k["value"] = [reader.nextFloat() for _ in range(4)]
-            elif k["type"] != 0:
-                raise ValueError(f"Unrecognized constant type: {k['type']}")
-            proto["kTable"].append(k)
-
-        proto["sizeProtos"] = reader.nextVarInt()
-        for _ in range(proto["sizeProtos"]):
-            proto["pTable"].append(proto_table[reader.nextVarInt()])
-
-        proto["lineDefined"] = reader.nextVarInt()
-
-        protoSourceId = reader.nextVarInt()
-        if protoSourceId > len(string_table):
-            raise IndexError(
-                f"Index {protoSourceId} out of range for stringTable with length {len(string_table)}"
-            )
-        if protoSourceId < len(string_table):
-            proto["source"] = string_table[protoSourceId]
-
-        if reader.nextByte() == 1:  # has line info?
-            compKey = reader.nextByte()
-            for _ in range(proto["sizeCode"]):
-                proto["smallLineInfo"].append(reader.nextByte())
-
-            _ = (proto["sizeCode"] + 3) & -4
-            intervals = ((proto["sizeCode"] - 1) >> compKey) + 1
-
-            for _ in range(intervals):
-                proto["largeLineInfo"].append(reader.nextInt())
-
-        if reader.nextByte() == 1:  # has debug info?
-            raise ValueError("only ROBLOX scripts can be disassembled")
+        read_proto_data(reader, proto, string_table)
 
     mainProtoId = reader.nextVarInt()
     if mainProtoId >= len(proto_table):
@@ -169,6 +93,80 @@ def deserialize_v5(
             f"Index {mainProtoId} out of range for protoTable with length {len(proto_table)}"
         )
     return proto_table[mainProtoId], proto_table, string_table, luau_version
+
+
+def create_empty_proto() -> Dict[str, Any]:
+    return {
+        "codeTable": [],
+        "kTable": [],
+        "pTable": [],
+        "smallLineInfo": [],
+        "largeLineInfo": [],
+    }
+
+
+def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[str]):
+    proto["maxStackSize"] = reader.nextByte()
+    proto["numParams"] = reader.nextByte()
+    proto["numUpValues"] = reader.nextByte()
+    proto["isVarArg"] = reader.nextByte()
+    proto["flags"] = reader.nextByte()
+    typesize = reader.nextVarInt()
+    proto["typeInfo"] = [reader.nextByte() for _ in range(typesize)]
+
+    proto["sizeCode"] = reader.nextVarInt()
+    proto["codeTable"].extend(reader.nextInt() for _ in range(proto["sizeCode"]))
+
+    proto["sizeConsts"] = reader.nextVarInt()
+    proto["kTable"] = [read_constant(reader, string_table) for _ in range(proto["sizeConsts"])]
+
+    proto["sizeProtos"] = reader.nextVarInt()
+    proto["pTable"] = [proto["pTable"][reader.nextVarInt()] for _ in range(proto["sizeProtos"])]
+
+    proto["lineDefined"] = reader.nextVarInt()
+    proto["source"] = read_proto_source(reader, string_table)
+
+    if reader.nextByte() == 1:  # has line info?
+        read_line_info(reader, proto)
+
+    if reader.nextByte() == 1:  # has debug info?
+        raise ValueError("only ROBLOX scripts can be disassembled")
+
+
+def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
+    k = {"type": reader.nextByte()}
+    if k["type"] == LBC_CONSTANT_BOOLEAN:
+        k["value"] = reader.nextByte() == 1
+    elif k["type"] == LBC_CONSTANT_NUMBER:
+        k["value"] = reader.nextDouble()
+    elif k["type"] == LBC_CONSTANT_STRING:
+        index = reader.nextVarInt() - 1
+        k["value"] = string_table[index] if 0 <= index < len(string_table) else "Invalid string index"
+    elif k["type"] == LBC_CONSTANT_IMPORT:
+        k["value"] = reader.nextInt()
+    elif k["type"] == LBC_CONSTANT_TABLE:
+        k["value"] = {"size": reader.nextVarInt(), "ids": [reader.nextVarInt() + 1 for _ in range(reader.nextVarInt())]}
+    elif k["type"] == LBC_CONSTANT_CLOSURE:
+        k["value"] = reader.nextVarInt() + 1
+    elif k["type"] == LBC_CONSTANT_VECTOR:
+        k["value"] = [reader.nextFloat() for _ in range(4)]
+    elif k["type"] != 0:
+        raise ValueError(f"Unrecognized constant type: {k['type']}")
+    return k
+
+
+def read_proto_source(reader: Reader, string_table: List[str]) -> str:
+    protoSourceId = reader.nextVarInt()
+    if protoSourceId >= len(string_table):
+        raise IndexError(f"Index {protoSourceId} out of range for stringTable with length {len(string_table)}")
+    return string_table[protoSourceId] if protoSourceId < len(string_table) else "Invalid source index"
+
+
+def read_line_info(reader: Reader, proto: Dict[str, Any]):
+    compKey = reader.nextByte()
+    proto["smallLineInfo"] = [reader.nextByte() for _ in range(proto["sizeCode"])]
+    intervals = ((proto["sizeCode"] - 1) >> compKey) + 1
+    proto["largeLineInfo"] = [reader.nextInt() for _ in range(intervals)]
 
 
 def parse_proto(
