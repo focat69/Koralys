@@ -292,8 +292,42 @@ def deserialize(
     debug(f"Bytecode version: {version}")
     if version == 5:
         return deserialize_v5(reader)
+    elif version == 6:
+        return deserialize_v6(reader)
     else:
         raise ValueError(f"Unsupported bytecode version: {version}")
+
+
+def deserialize_v6(
+    reader: Reader,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
+    types_version = reader.nextByte()
+    if types_version not in [1, 2, 3]:
+        raise ValueError(f"Invalid types version (types version: {types_version})")
+    debug("Types version:", types_version)
+
+    luau_version = f"Luau Version 6, Types Version {types_version}"
+
+    proto_table: List[Dict[str, Any]] = []
+    string_table: List[str] = []
+    size_strings = reader.nextVarInt()
+    debug("# of strings:", size_strings)
+    string_table.extend(reader.nextString() for _ in range(size_strings))
+    reader.skip(1)
+    size_protos = reader.nextVarInt()
+    debug("# of protos:", size_protos)
+    proto_table.extend(create_empty_proto() for _ in range(size_protos))
+
+    for i in range(size_protos):
+        proto = proto_table[i]
+        read_proto_data(reader, proto, string_table)
+
+    mainProtoId = reader.nextVarInt()
+    if mainProtoId >= len(proto_table):
+        raise IndexError(
+            f"Index {mainProtoId} out of range for protoTable with length {len(proto_table)}"
+        )
+    return proto_table[mainProtoId], proto_table, string_table, luau_version
 
 
 def read_proto(
