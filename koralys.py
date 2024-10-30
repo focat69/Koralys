@@ -464,6 +464,7 @@ def read_proto(
             "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
             "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True),
+            "FORNPREP": lambda _: f"R{A} -= R{A+2}; goto [{(codeIndex + 1 + Bx) & 0xFF}]"
         }
 
         for gen_op_name in ["ADD", "SUB", "MUL", "DIV", "MOD", "POW"]:
