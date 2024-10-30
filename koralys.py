@@ -228,35 +228,26 @@ def parse_proto(
 def parse_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
     try:
         k = {"type": reader.nextByte()}
-        if k["type"] == LBC_CONSTANT_NIL:
-            k["value"] = None
-        elif k["type"] == LBC_CONSTANT_BOOLEAN:
-            k["value"] = reader.nextByte() == 1
-        elif k["type"] == LBC_CONSTANT_NUMBER:
-            k["value"] = reader.nextDouble()
-        elif k["type"] == LBC_CONSTANT_STRING:
-            index = reader.nextVarInt()
-            adjusted_index = index - 1
-            if 0 <= adjusted_index < len(string_table):
-                k["value"] = string_table[adjusted_index]
-            else:
-                k["value"] = f"Invalid string index: {index}"
-        elif k["type"] == LBC_CONSTANT_IMPORT:
-            k["value"] = reader.nextUint32()
-        elif k["type"] == LBC_CONSTANT_TABLE:
-            size = reader.nextVarInt()
-            k["value"] = {
-                "size": size,
-                "ids": [reader.nextVarInt() for _ in range(size)],
-            }
-        elif k["type"] == LBC_CONSTANT_CLOSURE:
-            k["value"] = reader.nextVarInt()
-        elif k["type"] == LBC_CONSTANT_VECTOR:
-            k["value"] = [reader.nextFloat() for _ in range(4)]
-        elif k["type"] == 70:
-            k["value"] = reader.nextVarInt()
+        constant_handlers = {
+            LBC_CONSTANT_NIL: lambda: None,
+            LBC_CONSTANT_BOOLEAN: lambda: reader.nextByte() == 1,
+            LBC_CONSTANT_NUMBER: lambda: reader.nextDouble(),
+            LBC_CONSTANT_STRING: lambda: reader.nextVarInt() - 1,
+            LBC_CONSTANT_IMPORT: lambda: reader.nextUint32(),
+            LBC_CONSTANT_TABLE: lambda: {
+                "size": reader.nextVarInt(),
+                "ids": [reader.nextVarInt() for _ in range(reader.nextVarInt())],
+            },
+            LBC_CONSTANT_CLOSURE: lambda: reader.nextVarInt(),
+            LBC_CONSTANT_VECTOR: lambda: {
+                "size": reader.nextVarInt(),
+                "ids": [reader.nextVarInt() for _ in range(reader.nextVarInt())],
+            },
+        }
+        if handler := constant_handlers[k["type"]]:
+            k["value"] = handler()
         else:
-            k["value"] = f"Unknown type: {k['type']}, Value: {reader.nextVarInt()}"
+            raise ValueError(f"Unknown constant type: {k['type']}")
     except IndexError as e:
         k["value"] = f"Error reading constant: {str(e)}"
     return k
