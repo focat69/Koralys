@@ -401,7 +401,7 @@ def read_proto(
                 str: A formatted string representing the conditional jump statement.
             """
             pre_op = invert and " not " or " "
-            jump = opcode_handlers["JUMP"]()
+            jump = opcode_handlers["JUMP"]("JUMP")
             after_cond = op and f" {op} {k_mode and f"K{aux}" or aux} " or " "
             return f"if{pre_op}R{A}{after_cond}then {jump}"
 
