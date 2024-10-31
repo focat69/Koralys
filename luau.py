@@ -124,7 +124,7 @@ OP_TABLE_V5 = [
 # 2. v6 removed DEP_FORGLOOP_INEXT
 # also, this probably should be a different table.
 OP_TABLE_V6 = OP_TABLE_V5 + [
-    BytecodeOp("FASTCALL3", "iABC", 0xe3, True),
+    BytecodeOp("FASTCALL3", "iABC", 0x34, True),
 ]
 index = next(
     i for i, op in enumerate(OP_TABLE_V6) if op["name"] == "DEP_FORGLOOP_INEXT"
