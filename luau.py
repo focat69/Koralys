@@ -2,7 +2,19 @@
 Useful utility functions, and constants (e.g. the operation table, getting opcodes, other stuff) for Luau.
 """
 
-OP_TABLE = [
+from typing import Optional
+
+class BytecodeOpTable:
+    name: str
+    type: str
+    case: int
+    number: int
+    aux: Optional[bool]
+
+def get_op_table(bytecode_version: int) -> list[dict[str, BytecodeOpTable]]:
+	return OP_TABLE_VERSION_MAP[bytecode_version]
+
+OP_TABLE_V5 = [
     {"name": "NOP", "type": "none", "case": 0, "number": 0x00},
     {"name": "BREAK", "type": "none", "case": 1, "number": 0xE3},
     {"name": "LOADNIL", "type": "iA", "case": 2, "number": 0xC6},
@@ -113,6 +125,23 @@ OP_TABLE = [
     {"name": "COUNT", "type": "none", "case": 83, "number": 0x99},
 ]
 
+# notes:
+# 1. v6 added FASTCALL3.
+# 2. we need to now offset everything above FORGPREP_INEXT by 1,
+#    as FASTCALL3 is defined right after FORGPREP_INEXT
+# 3. v6 removed DEP_FORGLOOP_INEXT
+# also, this probably should be a different table.
+OP_TABLE_V6 = [{**op, 'case': op['case'] + 1} if op['case'] > 58 else op for op in OP_TABLE_V5] + [{
+    "name": "FASTCALL3", "type": "iABC", "case": 59, "number": 0xe3, "aux": True,
+}]
+index = next(i for i, op in enumerate(OP_TABLE_V6) if op["name"] == "DEP_FORGLOOP_INEXT")
+OP_TABLE_V6.pop(index)
+
+
+OP_TABLE_VERSION_MAP = {
+    6: OP_TABLE_V6,
+    5: OP_TABLE_V5
+}
 
 def get_opcode(i: int) -> int:
     return (i * 227) & 0xFF

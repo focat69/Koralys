@@ -45,7 +45,7 @@ from luau import (
     get_arg_Bx,
     get_arg_sBx,
     get_arg_sAx,
-    OP_TABLE,
+    get_op_table,
 )
 
 DEBUG = False  #! Will slow down the decompilation process significantly
@@ -66,14 +66,13 @@ LBC_CONSTANT_TABLE = 5
 LBC_CONSTANT_CLOSURE = 6
 LBC_CONSTANT_VECTOR = 7
 
+
 def deserialize_v5(
     reader: Reader,
-) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str], int, int]:
     types_version = reader.nextByte()
     if types_version not in [1, 2, 3]:
         raise ValueError(f"Invalid types version (types version: {types_version})")
-
-    luau_version = f"Luau Version 5, Types Version {types_version}"
 
     proto_table: List[Dict[str, Any]] = []
     string_table: List[str] = []
@@ -92,7 +91,7 @@ def deserialize_v5(
         raise IndexError(
             f"Index {mainProtoId} out of range for protoTable with length {len(proto_table)}"
         )
-    return proto_table[mainProtoId], proto_table, string_table, luau_version
+    return proto_table[mainProtoId], proto_table, string_table, 5, types_version
 
 
 def create_empty_proto() -> Dict[str, Any]:
@@ -112,16 +111,21 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
     proto["isVarArg"] = reader.nextByte()
     proto["flags"] = reader.nextByte()
     typesize = reader.nextVarInt()
-    proto["typeInfo"] = [reader.nextByte() for _ in range(typesize)]
+    type_info = [reader.nextByte() for _ in range(typesize)]
+    proto["typeInfo"] = type_info
 
     proto["sizeCode"] = reader.nextVarInt()
     proto["codeTable"].extend(reader.nextInt() for _ in range(proto["sizeCode"]))
 
     proto["sizeConsts"] = reader.nextVarInt()
-    proto["kTable"] = [read_constant(reader, string_table) for _ in range(proto["sizeConsts"])]
+    proto["kTable"] = [
+        read_constant(reader, string_table) for _ in range(proto["sizeConsts"])
+    ]
 
     proto["sizeProtos"] = reader.nextVarInt()
-    proto["pTable"] = [proto["pTable"][reader.nextVarInt()] for _ in range(proto["sizeProtos"])]
+    proto["pTable"] = [
+        proto["pTable"][reader.nextVarInt()] for _ in range(proto["sizeProtos"])
+    ]
 
     proto["lineDefined"] = reader.nextVarInt()
     proto["source"] = read_proto_source(reader, string_table)
@@ -141,11 +145,18 @@ def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
         k["value"] = reader.nextDouble()
     elif k["type"] == LBC_CONSTANT_STRING:
         index = reader.nextVarInt() - 1
-        k["value"] = string_table[index] if 0 <= index < len(string_table) else "Invalid string index"
+        k["value"] = (
+            string_table[index]
+            if 0 <= index < len(string_table)
+            else "Invalid string index"
+        )
     elif k["type"] == LBC_CONSTANT_IMPORT:
         k["value"] = reader.nextInt()
     elif k["type"] == LBC_CONSTANT_TABLE:
-        k["value"] = {"size": reader.nextVarInt(), "ids": [reader.nextVarInt() + 1 for _ in range(reader.nextVarInt())]}
+        k["value"] = {
+            "size": reader.nextVarInt(),
+            "ids": [reader.nextVarInt() + 1 for _ in range(reader.nextVarInt())],
+        }
     elif k["type"] == LBC_CONSTANT_CLOSURE:
         k["value"] = reader.nextVarInt() + 1
     elif k["type"] == LBC_CONSTANT_VECTOR:
@@ -158,8 +169,14 @@ def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
 def read_proto_source(reader: Reader, string_table: List[str]) -> str:
     protoSourceId = reader.nextVarInt()
     if protoSourceId >= len(string_table):
-        raise IndexError(f"Index {protoSourceId} out of range for stringTable with length {len(string_table)}")
-    return string_table[protoSourceId] if protoSourceId < len(string_table) else "Invalid source index"
+        raise IndexError(
+            f"Index {protoSourceId} out of range for stringTable with length {len(string_table)}"
+        )
+    return (
+        string_table[protoSourceId]
+        if protoSourceId < len(string_table)
+        else "Invalid source index"
+    )
 
 
 def read_line_info(reader: Reader, proto: Dict[str, Any]):
@@ -300,13 +317,11 @@ def deserialize(
 
 def deserialize_v6(
     reader: Reader,
-) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str]]:
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]], List[str], int, int]:
     types_version = reader.nextByte()
     if types_version not in [1, 2, 3]:
         raise ValueError(f"Invalid types version (types version: {types_version})")
     debug("Types version:", types_version)
-
-    luau_version = f"Luau Version 6, Types Version {types_version}"
 
     proto_table: List[Dict[str, Any]] = []
     string_table: List[str] = []
@@ -327,7 +342,7 @@ def deserialize_v6(
         raise IndexError(
             f"Index {mainProtoId} out of range for protoTable with length {len(proto_table)}"
         )
-    return proto_table[mainProtoId], proto_table, string_table, luau_version
+    return proto_table[mainProtoId], proto_table, string_table, 6, types_version
 
 
 def read_proto(
@@ -335,15 +350,18 @@ def read_proto(
     depth: int,
     proto_table: List[Dict[str, Any]],
     string_table: List[str],
-    luau_version: str,
+    luau_version: int,
 ) -> str:
+    OP_TABLE = get_op_table(luau_version)
     output = ""
     tab_space = "    " * (depth - 1)
 
     output += f"{tab_space}function({', '.join(['...' if proto['isVarArg'] else ''] + [f'R{i}' for i in range(proto['numParams'])])})\n"
 
     # opnameToOpcode = {info["name"]: info["number"] for info in OP_TABLE}
-    opcodeToOpname = {info["number"]: info["name"] for info in OP_TABLE}
+    opcodeToOpname = {
+        info["number"]: info["name"] for info in OP_TABLE
+    }
     max_opname_length = max(len(info["name"]) for info in OP_TABLE)
 
     # def get_opcode_from_name(opname: str) -> int:
@@ -405,7 +423,9 @@ def read_proto(
                     assert (
                         id_constant["type"] == LBC_CONSTANT_STRING
                     ), f"ID Constant {i} ({id_constant}) isn't a string."
-                    to_append = i > 0 and f".{id_constant['value']}" or id_constant["value"]
+                    to_append = (
+                        i > 0 and f".{id_constant['value']}" or id_constant["value"]
+                    )
                     # kinda ew but it works
                     # also slow but I don't care lol
                     # this is Python, what do you expect?
@@ -497,7 +517,7 @@ def read_proto(
             "FORGPREP": lambda _: f"R{A} = R{A+1}; R{A+1} = R{A+2}; R{A+2} = R{A+3}; R{A+3} = nil; goto [{(codeIndex + 1 + Bx) & 0xFF}]",
             "FORGLOOP": lambda _: f"R{A+3}, ..., R{A+2+C} = R{A}(R{A+1}, R{A+2}); if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{(codeIndex + 1 - Bx) & 0xFF}]",
             "FORGPREP_INEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
-            "FORGPREP_NEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]"
+            "FORGPREP_NEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
         }
 
         for gen_op_name in ["ADD", "SUB", "MUL", "DIV", "MOD", "POW"]:
@@ -570,33 +590,34 @@ def disassemble(bytecode: bytes) -> Tuple[List[str], List[str], int, str]:
     decompiled_output = []
 
     if bytecode[0] == 0:
-        return [bytecode[1:].decode("utf-8")], [], 0, "Luau Version Unknown"
+        return [bytecode[1:].decode("utf-8")], [], 0, -1, -1
 
-    try:
-        mainProto, protoTable, stringTable, LUAUVERSION = deserialize(bytecode)
-    except Exception as e:
-        return [f"Error: {e}"], [], 0, "Luau Version Unknown"
+    mainProto, protoTable, stringTable, luau_version, types_version = deserialize(
+        bytecode
+    )
 
     protos = 0
     for i, proto in enumerate(protoTable):
         output.extend(
             (
                 f"--< Proto->{i:03} | Line {proto.get('lineDefined', 0)} >--",
-                read_proto(proto, 1, protoTable, stringTable, LUAUVERSION),
+                read_proto(proto, 1, protoTable, stringTable, luau_version),
             )
         )
         decompiled_output.extend(
             (
                 f"-- Decompiled Proto->{i:03} --",
-                decompile(proto, 1, stringTable),
+                decompile(proto, 1, stringTable, luau_version),
             )
         )
         protos += 1
 
-    return output, decompiled_output, protos, LUAUVERSION
+    return output, decompiled_output, protos, luau_version, types_version
 
 
-def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
+def decompile(
+    proto: Dict[str, Any], depth: int, stringTable: List[str], luau_version: int
+) -> str:
     # Removed redundant variables, fixed jumps and cleaned up the output - focat
     # its still shit btw LMAO but some what better
     output = []
@@ -607,7 +628,9 @@ def decompile(proto: Dict[str, Any], depth: int, stringTable: List[str]) -> str:
     output.append(f"local function func{depth}({proto['isVarArg'] and '...' or ''})")
 
     # opname_to_opcode = {info['name']: info['number'] for info in luau_op_table}
-    opcode_to_opname = {info["number"]: info["name"] for info in OP_TABLE}
+    opcode_to_opname = {
+        info["number"]: info["name"] for info in get_op_table(luau_version)
+    }
 
     # def get_opcode(opname: str) -> int:
     #     return opname_to_opcode.get(opname, -1)
@@ -1082,13 +1105,22 @@ if __name__ == "__main__":
         bytecode = f.read()
 
     start = time.perf_counter()
-    disassembled, decompiled, protos, LUAUVERSION = disassemble(bytecode)
+    disassembled, decompiled, protos, luau_version, types_version = disassemble(
+        bytecode
+    )
     end = time.perf_counter()
 
     if DEBUG:
         print("\n".join(disassembled))
     disassembled_extra = "--<@ Disassembled with Koralys' BETA disassembler @>--\n"
-    disassembled_extra += f"--<@ Protos: {protos} | {LUAUVERSION} @>--\n"
+    versions = (
+        f"Luau version {luau_version}, types version {types_version}"
+        if luau_version != -1
+        else f"Luau version unknown, types version {types_version}"
+        if types_version != -1
+        else "Types version unknown, luau version unknown"
+    )
+    disassembled_extra += f"--<@ Protos: {protos} | {versions} @>--\n"
     disassembled_extra += f"--<@ Time taken: {end - start:.6f}s @>--\n"
     disassembled_str = "\n".join(disassembled)
     full_output = disassembled_extra + disassembled_str
