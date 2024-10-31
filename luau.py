@@ -15,7 +15,6 @@ class BytecodeOp:
         self.aux = aux
 
     def __getitem__(self, key: str):
-        print(key)
         return getattr(self, key)
 
     def __setitem__(self, key, value):
