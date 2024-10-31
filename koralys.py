@@ -358,11 +358,11 @@ def read_proto(
 
     output += f"{tab_space}function({', '.join(['...' if proto['isVarArg'] else ''] + [f'R{i}' for i in range(proto['numParams'])])})\n"
 
-    # opnameToOpcode = {info["name"]: info["number"] for info in OP_TABLE}
+    # opnameToOpcode = {info.name: info["number"] for info in OP_TABLE}
     opcodeToOpname = {
-        info["number"]: info["name"] for info in OP_TABLE
+        info.number: info.name for info in OP_TABLE
     }
-    max_opname_length = max(len(info["name"]) for info in OP_TABLE)
+    max_opname_length = max(len(info.name) for info in OP_TABLE)
 
     # def get_opcode_from_name(opname: str) -> int:
     #     opcode = opnameToOpcode.get(opname)
@@ -386,7 +386,7 @@ def read_proto(
 
         aux = None
         if any(
-            info["name"] == op_name and info.get("aux", False) for info in OP_TABLE
+            info.name == op_name and info.get("aux", False) for info in OP_TABLE
         ) and codeIndex + 1 < len(proto["codeTable"]):
             aux = proto["codeTable"][codeIndex + 1]
             codeIndex += 1
@@ -629,7 +629,7 @@ def decompile(
 
     # opname_to_opcode = {info['name']: info['number'] for info in luau_op_table}
     opcode_to_opname = {
-        info["number"]: info["name"] for info in get_op_table(luau_version)
+        info["number"]: info.name for info in get_op_table(luau_version)
     }
 
     # def get_opcode(opname: str) -> int:
