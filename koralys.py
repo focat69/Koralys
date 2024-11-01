@@ -510,6 +510,7 @@ def read_proto(
             "JUMPIFNOTLT": lambda _: jump_if_gen("<", True),
             "JUMPX": lambda _: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]",
             "FASTCALL": lambda _: f"R{A} = builtin[{C}]",
+            "FASTCALL3": lambda _: f"R{A} = builtin[{C}]",
             "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
             "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True),
