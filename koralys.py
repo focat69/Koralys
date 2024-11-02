@@ -522,21 +522,43 @@ def read_proto(
             opcode_handlers[f"JUMPIF{condition or ''}"] = lambda _: jump_if_gen(condition)
             opcode_handlers[f"JUMPIFNOT{condition or ''}"] = lambda _: jump_if_gen(condition, True)
 
+        for gen_op_name in ["AND", "OR"]:
+            def __gen_op_handler(gen_op_name: str):
+                op = "and" if gen_op_name.startswith("AND") else "or"
+                if gen_op_name.endswith("K"):
+                    k = (
+                        proto["kTable"][C]
+                        if C < len(proto["kTable"])
+                        else {"type": "nil", "value": "nil"}
+                    )
+                    return f"R{A} = R{B} {op} "\
+                        f"{repr(k['value']) if isinstance(k['value'], str) else k['value']}"
+                else:
+                    return f"R{A} = R{B} {op} R{C} "\
+                        f"{repr(k['value']) if isinstance(k['value'], str) else k['value']}"
+            opcode_handlers[gen_op_name] = __gen_op_handler
+            opcode_handlers[f"{gen_op_name}K"] = __gen_op_handler
+
+        math_ops = {
+            "ADD": "+",
+            "SUB": "-",
+            "MUL": "*",
+            "DIV": "/",
+            "MOD": "%",
+            "POW": "^",
+        }
+
+        for gen_op_name in ["SUBRK", "DIVRK"]:
+            opcode_handlers[gen_op_name] = lambda op: f"R{A} = R{A} {math_ops[op[:-2]]} R{C}"
+
+
         for gen_op_name in ["ADD", "SUB", "MUL", "DIV", "MOD", "POW"]:
-            ops = {
-                "ADD": "+",
-                "SUB": "-",
-                "MUL": "*",
-                "DIV": "/",
-                "MOD": "%",
-                "POW": "^",
-            }
             opcode_handlers[gen_op_name] = (
-                lambda opcode: f"R{A} = R{B} {ops[opcode]} R{C}"
+                lambda opcode: f"R{A} = R{B} {math_ops[opcode]} R{C}"
             )
 
             def __gen_op_handler(opcode):
-                op = ops[opcode[:-1]]
+                op = math_ops[opcode[:-1]]
                 k = (
                     proto["kTable"][C]
                     if C < len(proto["kTable"])
