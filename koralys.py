@@ -456,9 +456,6 @@ def read_proto(
             "NOP": lambda _: "-- do nothing (no-op / NOP)",
             "BREAK": lambda _: "break",
             "PREPVARARGS": lambda _: f"(adjust vararg params, {A} fixed params)",
-            # (yes, `B - 1` can return -1, but the Luau disassembler does this so hopefully it's fine)
-            # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2171-L2173
-            "GETVARARGS": lambda _: f"R{A} = {B - 1}",
             "LOADNIL": lambda _: f"R{A} = nil",
             "LOADB": lambda _: f"R{A} = {bool(B)}; "
             + (f"goto [{codeIndex + C + 1}]" if C != 0 else ""),
@@ -517,6 +514,9 @@ def read_proto(
             "FORGLOOP": lambda _: f"R{A+3}, ..., R{A+2+C} = R{A}(R{A+1}, R{A+2}); if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{(codeIndex + 1 - Bx) & 0xFF}]",
             "FORGPREP_INEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
             "NATIVECALL": lambda _: "Unimplemented",
+            # (yes, `B - 1` can return -1, but the Luau disassembler does this so hopefully it's fine)
+            # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2171-L2173
+            "GETVARARGS": lambda _: f"R{A} = {B - 1}",
             "FORGPREP_NEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
         }
 
