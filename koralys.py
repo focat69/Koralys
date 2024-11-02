@@ -502,12 +502,6 @@ def read_proto(
             else f"return R{A} ... R{A+B-2}",
             "JUMP": lambda _: f"goto [{(codeIndex + 1 + sBx) & 0xFF}]",
             "JUMPBACK": lambda _: f"goto [{(codeIndex + 1 - sBx) & 0xFF}]",
-            "JUMPIF": lambda _: jump_if_gen(),
-            "JUMPIFNOT": lambda _: jump_if_gen(None, True),
-            "JUMPIFEQ": lambda _: jump_if_gen("=="),
-            "JUMPIFLE": lambda _: jump_if_gen("<="),
-            "JUMPIFNOTLE": lambda _: jump_if_gen("<=", True),
-            "JUMPIFNOTLT": lambda _: jump_if_gen("<", True),
             "JUMPX": lambda _: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]",
             "FASTCALL": lambda _: f"R{A} = builtin[{C}]",
             "FASTCALL3": lambda _: f"R{A} = builtin[{C}]",
@@ -521,6 +515,10 @@ def read_proto(
             "FORGPREP_INEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
             "FORGPREP_NEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
         }
+
+        for condition in ["EQ", "LE", "LT", None]:
+            opcode_handlers[f"JUMPIF{condition or ''}"] = lambda _: jump_if_gen(condition)
+            opcode_handlers[f"JUMPIFNOT{condition or ''}"] = lambda _: jump_if_gen(condition, True)
 
         for gen_op_name in ["ADD", "SUB", "MUL", "DIV", "MOD", "POW"]:
             ops = {
