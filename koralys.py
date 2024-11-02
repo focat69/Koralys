@@ -123,9 +123,9 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
     ]
 
     proto["sizeProtos"] = reader.nextVarInt()
-    proto["pTable"] = [
-        proto["pTable"][reader.nextVarInt()] for _ in range(proto["sizeProtos"])
-    ]
+    proto["pTable"] = proto["sizeProtos"] > 1 and [
+        proto["pTable"][reader.nextVarInt() - 1] for _ in range(proto["sizeProtos"])
+    ] or []
 
     proto["lineDefined"] = reader.nextVarInt()
     proto["source"] = read_proto_source(reader, string_table)
@@ -601,7 +601,7 @@ def read_proto(
             )(k)
             output += f"{'    ' * depth}[{i}] = {value}\n"
 
-    if "sizeProtos" in proto and proto["sizeProtos"] > 0:
+    if "sizeProtos" in proto and proto["sizeProtos"] > 1:
         output += "--< Protos >--\n"
         for i, p in enumerate(proto["pTable"]):
             output += f"{'    ' * depth}[{i}] = {read_proto(p, depth + 1, proto_table, string_table, luau_version)}\n"
