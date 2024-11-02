@@ -463,6 +463,7 @@ def read_proto(
 
         opcode_handlers = {
             "NOP": lambda _: "-- do nothing (no-op / NOP)",
+            "BREAK": lambda _: "break",
             "PREPVARARGS": lambda _: f"(adjust vararg params, {A} fixed params)",
             "LOADNIL": lambda _: f"R{A} = nil",
             "LOADB": lambda _: f"R{A} = {bool(B)}; "
