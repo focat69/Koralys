@@ -168,10 +168,6 @@ def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
 
 def read_proto_source(reader: Reader, string_table: List[str]) -> str:
     protoSourceId = reader.nextVarInt()
-    if protoSourceId >= len(string_table):
-        raise IndexError(
-            f"Index {protoSourceId} out of range for stringTable with length {len(string_table)}"
-        )
     return (
         string_table[protoSourceId]
         if protoSourceId < len(string_table)
