@@ -518,6 +518,7 @@ def read_proto(
             "FORGPREP": lambda _: f"R{A} = R{A+1}; R{A+1} = R{A+2}; R{A+2} = R{A+3}; R{A+3} = nil; goto [{(codeIndex + 1 + Bx) & 0xFF}]",
             "FORGLOOP": lambda _: f"R{A+3}, ..., R{A+2+C} = R{A}(R{A+1}, R{A+2}); if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{(codeIndex + 1 - Bx) & 0xFF}]",
             "FORGPREP_INEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
+            "NATIVECALL": lambda _: "Unimplemented",
             "FORGPREP_NEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
         }
 
