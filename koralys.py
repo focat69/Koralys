@@ -18,19 +18,14 @@ Turning on the `DEBUG` flag will slow down the decompilation process significant
 0.000406s -> 0.002075s, around 5x slower
 The `DEBUG` flag is meant for development purposes only. Turn off before using in production.
 
->> There is no V6 support in this version!
->> To get access, become a beta tester.
-
 Issues:
     Makes everything a proto even if it isnt
     Does not show jump targets (eg. if code has goto [5] but only has 3 instructions, it doesnt show "::5::" and it's dism)
     Decompile is broken/really bad/unfinished
     No type checking
     Does not handle variables kindly
-    No v6 support (not an issue just not added to this version lol)
 
 Please contribute and fix these bugs and more that you may find.
-(except v6 support we got dat)
 """
 
 import sys
