@@ -452,6 +452,10 @@ def read_proto(
             after_cond = op and f" {op} {k_mode and f'K{aux}' or aux} " or " "
             return f"if{pre_op}R{A}{after_cond}then {jump}"
 
+        def __LOADKX_handler(_):
+            k = proto["kTable"][aux] if aux < len(proto["kTable"]) else {"type": "nil", "value": "nil"}
+            return f"R{A} = {repr(k['value']) if isinstance(k['value'], str) else k['value']}"
+
         opcode_handlers = {
             "NOP": lambda _: "-- do nothing (no-op / NOP)",
             "BREAK": lambda _: "break",
@@ -518,6 +522,7 @@ def read_proto(
             # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2171-L2173
             "GETVARARGS": lambda _: f"R{A} = {B - 1}",
             "DUPCLOSURE": lambda _: f"R{A} = K{Bx} -- duplicate",
+            "LOADKX": __LOADKX_handler,
             "FORGPREP_NEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
         }
 
