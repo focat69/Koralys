@@ -486,8 +486,8 @@ def read_proto(
             "GETTABLEKS": lambda _: f"R{A} = R{B}[{repr(string_table[aux])}"
             if aux is not None and aux < len(string_table)
             else f"R{A} = R{B}[Invalid string index]",
-            "SETTABLEKS": lambda _: f"R{B}[{repr(string_table[aux])}] = R{A}"
-            if aux is not None and aux < len(string_table)
+            "SETTABLEKS": lambda _: f"R{B}[{repr(string_table[aux - 1])}] = R{A}"
+            if aux is not None and aux - 1 < len(string_table)
             else f"R{B}[Invalid string index] = R{A}",
             "GETTABLEN": lambda _: f"R{A} = R{B}[{C + 1}]",
             "SETTABLEN": lambda _: f"R{B}[{C + 1}] = R{A}",
