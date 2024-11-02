@@ -515,6 +515,7 @@ def read_proto(
             "LENGTH": lambda _: f"R{A} = #R{B}",
             # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2134-L2136
             "NEWTABLE": lambda _: f"R{A} = table with {(B == 0 and 0 or 1 << max(0, B - 1)) + 1} entries",
+            "DUPTABLE": lambda _: f"R{A} = R{B} -- duplicate",
             "CONCAT": lambda _: f"R{A} = R{B} .. R{C}",
             "NOT": lambda _: f"R{A} = not R{B}",
             "FORGPREP": lambda _: f"R{A} = R{A+1}; R{A+1} = R{A+2}; R{A+2} = R{A+3}; R{A+3} = nil; goto [{(codeIndex + 1 + Bx) & 0xFF}]",
