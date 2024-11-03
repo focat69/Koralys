@@ -452,6 +452,10 @@ def read_proto(
             after_cond = op and f" {op} {k_mode and f'K{aux}' or aux} " or " "
             return f"if{pre_op}R{A}{after_cond}then {jump}"
 
+        def jumpx_if_gen(value: str):
+            jump = opcode_handlers["JUMPX"]("JUMPX")
+            return f"if R{A} == {value} then {jump}"
+
         def __LOADKX_handler(_):
             k = proto["kTable"][aux] if aux < len(proto["kTable"]) else {"type": "nil", "value": "nil"}
             return f"R{A} = {repr(k['value']) if isinstance(k['value'], str) else k['value']}"
@@ -499,6 +503,12 @@ def read_proto(
             "JUMP": lambda _: f"goto [{(codeIndex + 1 + sBx) & 0xFF}]",
             "JUMPBACK": lambda _: f"goto [{(codeIndex + 1 - sBx) & 0xFF}]",
             "JUMPX": lambda _: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]",
+            "JUMPXEQKNIL": lambda _: jumpx_if_gen("nil"),
+            "JUMPXEQKB": lambda _: jumpx_if_gen(str(bool(B)).lower()),
+            "JUMPXEQKN": lambda _: jumpx_if_gen(aux),
+            "JUMPXEQKS": lambda _: jumpx_if_gen(string_table[aux] \
+                    if aux is not None \
+                            and aux < len(string_table) else "Invalid string index"),
             "FASTCALL": lambda _: f"R{A} = builtin[{C}]",
             "FASTCALL1": lambda _: f"R{A} = builtin[{C}](R{B})",
             "FASTCALL2": lambda _: f"R{A} = builtin[{C}](R{B}, R{aux})",
