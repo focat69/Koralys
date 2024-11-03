@@ -667,6 +667,7 @@ def decompile(
     # Removed redundant variables, fixed jumps and cleaned up the output - focat
     # its still shit btw LMAO but some what better
     output = []
+    OP_TABLE = get_op_table(luau_version)
 
     def add_tab_space(depth):
         return "    " * depth
@@ -675,7 +676,7 @@ def decompile(
 
     # opname_to_opcode = {info['name']: info['number'] for info in luau_op_table}
     opcode_to_opname = {
-        info["number"]: info.name for info in get_op_table(luau_version)
+        info["number"]: info.name for info in OP_TABLE
     }
 
     # def get_opcode(opname: str) -> int:
@@ -691,9 +692,17 @@ def decompile(
                 return str(k["value"])
         return str(k)
 
-    for code_index, i in enumerate(proto["codeTable"]):
+    code_index = 0
+    while code_index < len(proto["codeTable"]):
         try:
+            i = proto["codeTable"][code_index]
             opc = get_opcode(i)
+            opname = opcode_to_opname.get(opc, "UNKNOWN")
+            if any(
+                info.name == opname and info.get("aux", False) for info in OP_TABLE
+            ) and code_index + 1 < len(proto["codeTable"]):
+                aux = proto["codeTable"][code_index + 1]
+                code_index += 1
             A = get_arg_a(i)
             B = get_arg_b(i)
             Bx = get_arg_Bx(i)
@@ -705,8 +714,6 @@ def decompile(
                 if code_index + 1 < len(proto["codeTable"])
                 else None
             )
-
-            opname = opcode_to_opname.get(opc, "UNKNOWN")
 
             if opname == "LOADNIL":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = nil")
@@ -1137,6 +1144,7 @@ def decompile(
             output.append(
                 f"{add_tab_space(depth + 1)}Error processing opcode: {str(e)}"
             )
+        code_index += 1
 
     output.append("end")
     return "\n".join(output)
