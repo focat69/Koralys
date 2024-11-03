@@ -13,6 +13,10 @@ Written by:
         "Discord": @_jifacepellyfreckles, (1233718214714724385)
         "Github": ssynical
     })
+    - DataModell ({
+        "Discord": @datamodel (773207810120089600)
+        "GitHub": DataM0del
+    })
 
 Turning on the `DEBUG` flag will slow down the decompilation process significantly.
 0.000406s -> 0.002075s, around 5x slower
