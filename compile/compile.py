@@ -3,6 +3,7 @@ import subprocess
 import os
 from pathlib import Path
 from sys import platform
+from platform import machine
 from requests import get
 from zipfile import ZipFile
 
@@ -67,6 +68,12 @@ def download_compiler(version: str, destination: Path):
                     )
         case "darwin":
             download_platform = "macos"
+            if machine() != "aarch64":
+                print(f"The prebuilt binaries for MacOS are for Apple Silicon/aarch64, not {machine()}.")
+                print("You'll have to compile Luau yourself using CMake.")
+                raise ValueError(
+                    f"The prebuilt binaries for MacOS are for Apple Silicon/aarch64, not {machine()}."
+                )
         case _:
             print(f"Your OS {os.name} isn't supported.")
             print(
