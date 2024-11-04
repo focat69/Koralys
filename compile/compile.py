@@ -59,6 +59,13 @@ def download_compiler(version: str, destination: Path):
                     download_platform = "ubuntu"
                 case "darwin":
                     download_platform = "macos"
+                    if machine() != "aarch64":
+                        print("The prebuilt binaries for MacOS are for Apple Silicon/aarch64.")
+                        print(f"You are using the following architecture: {machine()}")
+                        print("You'll have to compile Luau yourself using CMake.")
+                        raise ValueError(
+                            f"The prebuilt binaries for MacOS are for Apple Silicon/aarch64, not {machine()}."
+                        )
                 case value:
                     # not sure if the Ubuntu ELF binaries actually work on FreeBSD or etc.
                     # but hopefully...
@@ -66,14 +73,6 @@ def download_compiler(version: str, destination: Path):
                     print(
                         f"sys.platform value {value} not handle, assuming Linux/Ubuntu."
                     )
-        case "darwin":
-            download_platform = "macos"
-            if machine() != "aarch64":
-                print(f"The prebuilt binaries for MacOS are for Apple Silicon/aarch64, not {machine()}.")
-                print("You'll have to compile Luau yourself using CMake.")
-                raise ValueError(
-                    f"The prebuilt binaries for MacOS are for Apple Silicon/aarch64, not {machine()}."
-                )
         case _:
             print(f"Your OS {os.name} isn't supported.")
             print(
