@@ -73,6 +73,7 @@ def download_compiler(version: str, destination: Path):
                     print(
                         f"sys.platform value {value} not handle, assuming Linux/Ubuntu."
                     )
+                    download_platform = "ubuntu"
         case _:
             print(f"Your OS {os.name} isn't supported.")
             print(
