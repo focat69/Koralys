@@ -702,22 +702,18 @@ def decompile(
             i = proto["codeTable"][code_index]
             opc = get_opcode(i)
             opname = opcode_to_opname.get(opc, "UNKNOWN")
-            if any(
-                info.name == opname and info.get("aux", False) for info in OP_TABLE
-            ) and code_index + 1 < len(proto["codeTable"]):
-                aux = proto["codeTable"][code_index + 1]
-                code_index += 1
             A = get_arg_a(i)
             B = get_arg_b(i)
             Bx = get_arg_Bx(i)
             C = get_arg_c(i)
             sBx = get_arg_sBx(i)
             sAx = get_arg_sAx(i)
-            aux = (
-                proto["codeTable"][code_index + 1]
-                if code_index + 1 < len(proto["codeTable"])
-                else None
-            )
+            aux = None
+            if any(
+                info.name == opname and info.get("aux", False) for info in OP_TABLE
+            ) and code_index + 1 < len(proto["codeTable"]):
+                aux = proto["codeTable"][code_index + 1]
+                code_index += 1
 
             if opname == "LOADNIL":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = nil")
