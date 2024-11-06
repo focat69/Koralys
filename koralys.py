@@ -79,6 +79,16 @@ def deserialize_v5(
 
     size_strings = reader.nextVarInt()
     string_table.extend(reader.nextString() for _ in range(size_strings))
+    if types_version >= 3: # this is only in types version 3
+        # if you don't know what this is, I didn't too.
+        # look here:
+        # https://github.com/MaximumADHD/RCT-Source/blob/6aa8566bb7d91d3b22b89e74ff2ff89e911daad2/src/Luau/LuauDisassembly.cs#L75-L81
+        # an index??? ok...
+        # basically pasted from there anyways
+        index = reader.nextByte()
+
+        while index != 0:
+            index = reader.nextByte()
     size_protos = reader.nextVarInt()
     proto_table.extend(create_empty_proto() for _ in range(size_protos))
 
