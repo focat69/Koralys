@@ -721,7 +721,9 @@ def decompile(
             sAx = get_arg_sAx(i)
             aux = (
                 proto["codeTable"][code_index + 1]
-                if code_index + 1 < len(proto["codeTable"])
+                if any(info.name == opname and \
+                        info.get("aux", False) for info in OP_TABLE) \
+                and code_index + 1 < len(proto["codeTable"])
                 else None
             )
             if aux is not None:
