@@ -718,11 +718,12 @@ def decompile(
             C = get_arg_c(i)
             sBx = get_arg_sBx(i)
             sAx = get_arg_sAx(i)
-            aux = None
-            if any(
-                info.name == opname and info.get("aux", False) for info in OP_TABLE
-            ) and code_index + 1 < len(proto["codeTable"]):
-                aux = proto["codeTable"][code_index + 1]
+            aux = (
+                proto["codeTable"][code_index + 1]
+                if code_index + 1 < len(proto["codeTable"])
+                else None
+            )
+            if aux is not None:
                 code_index += 1
 
             if opname == "LOADNIL":
