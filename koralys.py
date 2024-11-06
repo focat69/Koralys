@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Koralys Disassembler & Decompiler
 >> This project is a result of countless hours of hard work and development.
