@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Koralys Disassembler & Decompiler
 >> This project is a result of countless hours of hard work and development.
@@ -78,6 +79,16 @@ def deserialize_v5(
 
     size_strings = reader.nextVarInt()
     string_table.extend(reader.nextString() for _ in range(size_strings))
+    if types_version >= 3: # this is only in types version 3
+        # if you don't know what this is, I didn't too.
+        # look here:
+        # https://github.com/MaximumADHD/RCT-Source/blob/6aa8566bb7d91d3b22b89e74ff2ff89e911daad2/src/Luau/LuauDisassembly.cs#L75-L81
+        # an index??? ok...
+        # basically pasted from there anyways
+        index = reader.nextByte()
+
+        while index != 0:
+            index = reader.nextByte()
     size_protos = reader.nextVarInt()
     proto_table.extend(create_empty_proto() for _ in range(size_protos))
 
@@ -323,7 +334,17 @@ def deserialize_v6(
     size_strings = reader.nextVarInt()
     debug("# of strings:", size_strings)
     string_table.extend(reader.nextString() for _ in range(size_strings))
-    reader.skip(1)
+    if types_version >= 3: # this is only in types version 3
+        # if you don't know what this is, I didn't too.
+        # look here:
+        # https://github.com/MaximumADHD/RCT-Source/blob/6aa8566bb7d91d3b22b89e74ff2ff89e911daad2/src/Luau/LuauDisassembly.cs#L75-L81
+        # an index??? ok...
+        # basically pasted from there anyways
+        index = reader.nextByte()
+
+        while index != 0:
+            index = reader.nextByte()
+
     size_protos = reader.nextVarInt()
     debug("# of protos:", size_protos)
     proto_table.extend(create_empty_proto() for _ in range(size_protos))
@@ -702,11 +723,6 @@ def decompile(
             i = proto["codeTable"][code_index]
             opc = get_opcode(i)
             opname = opcode_to_opname.get(opc, "UNKNOWN")
-            if any(
-                info.name == opname and info.get("aux", False) for info in OP_TABLE
-            ) and code_index + 1 < len(proto["codeTable"]):
-                aux = proto["codeTable"][code_index + 1]
-                code_index += 1
             A = get_arg_a(i)
             B = get_arg_b(i)
             Bx = get_arg_Bx(i)
@@ -715,9 +731,13 @@ def decompile(
             sAx = get_arg_sAx(i)
             aux = (
                 proto["codeTable"][code_index + 1]
-                if code_index + 1 < len(proto["codeTable"])
+                if any(info.name == opname and \
+                        info.get("aux", False) for info in OP_TABLE) \
+                and code_index + 1 < len(proto["codeTable"])
                 else None
             )
+            if aux is not None:
+                code_index += 1
 
             if opname == "LOADNIL":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = nil")
