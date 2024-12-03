@@ -8,8 +8,8 @@ from requests import get
 from zipfile import ZipFile
 
 self_dir = Path(__file__).parent.absolute()
-# input_lua = os.path.join(self_dir, "uselesscode.luau") # Unrecognized constant type: 42
-input_lua = self_dir.joinpath("example.luau")
+input_lua = os.path.join(self_dir, "uselesscode.luau") # Unrecognized constant type: 42
+# input_lua = self_dir.joinpath("example.luau")
 output_bin_v6 = self_dir.joinpath("output_v6.luac")
 output_bin_v5 = self_dir.joinpath("output_v5.luac")
 compilers_path = self_dir.joinpath("compilers")

@@ -128,6 +128,8 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
     proto["codeTable"].extend(reader.nextInt() for _ in range(proto["sizeCode"]))
 
     proto["sizeConsts"] = reader.nextVarInt()
+    # TODO: this has a issue
+    #       with being offset.
     proto["kTable"] = [
         read_constant(reader, string_table) for _ in range(proto["sizeConsts"])
     ]
