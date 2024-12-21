@@ -22,6 +22,9 @@ If you'd like to compile your script, please refer to the `/compile` directory.
 - **DataModell**
   - Discord: @datamodel (773207810120089600)
   - GitHub: [DataM0del](https://github.com/DataM0del)
+- **Desiderium / Lxnny**
+  - Discord: @000desiderium (1122940719531839638)
+  - GitHub: [lxnnydev](https://github.com/lxnnydev)
 
 ## Debug Mode
 
@@ -33,7 +36,10 @@ The `DEBUG` flag is meant for development purposes only. Turn off before using i
 ## Issues
 
 - Makes everything a proto even if it isn't
-- Does not show jump targets (e.g., if code has `goto [5]` but only has 3 instructions, it doesn't show `::5::` and its dism)
+  
+- ~~Does not show jump targets (e.g., if code has `goto [5]` but only has 3 instructions, it doesn't show `::5::` and its dism)~~ (Fixed)
+-> May cause some complications though
+
 - Decompile is broken/really bad/unfinished
 - No type checking
 - Does not handle variables kindly
