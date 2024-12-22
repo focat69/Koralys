@@ -37,7 +37,7 @@ The `DEBUG` flag is meant for development purposes only. Turn off before using i
 
 - Makes everything a proto even if it isn't
   
-- ~~Does not show jump targets (e.g., if code has `goto [5]` but only has 3 instructions, it doesn't show `::5::` and its dism)~~ (Fixed)
+- ~~Does not show jump targets (e.g., if code has `goto [5]` but only has 3 instructions, it doesn't show `::5::` and its dism)~~ (Fixed, but not implemented?)
 -> May cause some complications though
 
 - Decompile is broken/really bad/unfinished
