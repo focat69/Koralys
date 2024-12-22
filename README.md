@@ -22,9 +22,6 @@ If you'd like to compile your script, please refer to the `/compile` directory.
 - **DataModell**
   - Discord: @datamodel (773207810120089600)
   - GitHub: [DataM0del](https://github.com/DataM0del)
-- **Desiderium / Lxnny**
-  - Discord: @000desiderium (1122940719531839638)
-  - GitHub: [lxnnydev](https://github.com/lxnnydev)
 
 ## Debug Mode
 
