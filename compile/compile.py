@@ -13,8 +13,8 @@ input_lua = os.path.join(self_dir, "uselesscode.luau") # Unrecognized constant t
 output_bin_v6 = self_dir.joinpath("output_v6.luac")
 output_bin_v5 = self_dir.joinpath("output_v5.luac")
 compilers_path = self_dir.joinpath("compilers")
-# latest Luau version as of Nov 3, 2024, uses bytecode v6
-compiler_version_full = "0.650"
+# latest Luau version as of Mar 25, 2025, uses bytecode v6
+compiler_version_full = "0.666"
 luau_compiler_path = compilers_path.joinpath(compiler_version_full.split(".")[1])
 # the last version of the Luau compiler that outputs Luau bytecode v5 by default
 compiler_version_v5_full = "0.630"
