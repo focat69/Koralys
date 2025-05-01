@@ -1176,7 +1176,7 @@ def decompile(
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python disassembler.py <bytecode_file>")
+        print("Usage: python koralys.py <bytecode_file>")
         sys.exit(1)
 
     with open(sys.argv[1], "rb") as f:
