@@ -154,7 +154,8 @@ def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
     elif k["type"] == LBC_CONSTANT_NUMBER:
         k["value"] = reader.nextDouble()
     elif k["type"] == LBC_CONSTANT_STRING:
-        index = reader.nextVarInt() - 1
+        raw_index = reader.nextVarInt()
+        index = raw_index - 1
         k["value"] = (
             string_table[index]
             if 0 <= index < len(string_table)
@@ -472,10 +473,14 @@ def read_proto(
             Returns:
                 str: A formatted string representing the conditional jump statement.
             """
+            op_map = {"EQ": "==", "LE": "<=", "LT": "<"}
+            current_A = A
+            current_aux = aux
             pre_op = " not " if invert else " "
             jump = opcode_handlers["JUMP"]("JUMP")
-            after_cond = op and f" {op} {k_mode and f'K{aux}' or aux} " or " "
-            return f"if{pre_op}R{A}{after_cond}then {jump}"
+            operator = op_map.get(op, op) if op else ""
+            after_cond = operator and f" {operator} {k_mode and f'K{current_aux}' or f'R{current_aux}'} " or " "
+            return f"if{pre_op}R{current_A}{after_cond}then {jump}"
 
         def jumpx_if_gen(value: str):
             jump = opcode_handlers["JUMPX"]("JUMPX")
@@ -495,9 +500,11 @@ def read_proto(
             "LOADN": lambda _: f"R{A} = {Bx}",
             "LOADK": lambda _: f"R{A} = {Bx}",
             "MOVE": lambda _: f"R{A} = R{B}",
-            "GETGLOBAL": lambda _: f"R{A} = _G[{repr(string_table[aux])}]"
-            if aux is not None and aux < len(string_table)
-            else f"R{A} = _G[Invalid string index]",
+            "GETGLOBAL": lambda _, curr_aux=aux, curr_A=A: (
+                f"R{curr_A} = _G[{repr(proto['kTable'][curr_aux]['value'])}]"
+                if curr_aux is not None and curr_aux < len(proto['kTable'])
+                else f"R{curr_A} = _G[Invalid constant index]"
+            ),
             "SETGLOBAL": lambda _: f"_G[{repr(string_table[aux])}]"
             if aux is not None and aux < len(string_table)
             else f"_G[Invalid string index] = R{A}",
@@ -565,8 +572,8 @@ def read_proto(
         }
 
         for condition in ["EQ", "LE", "LT", None]:
-            opcode_handlers[f"JUMPIF{condition or ''}"] = lambda _: jump_if_gen(condition)
-            opcode_handlers[f"JUMPIFNOT{condition or ''}"] = lambda _: jump_if_gen(condition, True)
+            opcode_handlers[f"JUMPIF{condition or ''}"] = lambda _, cond=condition: jump_if_gen(cond)
+            opcode_handlers[f"JUMPIFNOT{condition or ''}"] = lambda _, cond=condition: jump_if_gen(cond, True)
 
         for gen_op_name in ["AND", "OR"]:
             def __gen_op_handler(gen_op_name: str):

@@ -5,3 +5,4 @@ decompiled.luau
 *.pyc
 __pycache__
 compile/compilers
+/compile/bytecode
