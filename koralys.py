@@ -505,27 +505,35 @@ def read_proto(
                 if curr_aux is not None and curr_aux < len(proto['kTable'])
                 else f"R{curr_A} = _G[Invalid constant index]"
             ),
-            "SETGLOBAL": lambda _: f"_G[{repr(string_table[aux])}]"
-            if aux is not None and aux < len(string_table)
-            else f"_G[Invalid string index] = R{A}",
+            "SETGLOBAL": lambda _, curr_aux=aux, curr_A=A: (
+                f"_G[{repr(proto['kTable'][curr_aux]['value'])}] = R{curr_A}"
+                if curr_aux is not None and curr_aux < len(proto['kTable'])
+                else f"_G[Invalid constant index] = R{curr_A}"
+            ),
             "GETUPVAL": lambda _: f"R{A} = U{B}",
             "SETUPVAL": lambda _: f"U{B} = R{A}",
             "CLOSEUPVALS": lambda _: f"close upvalues R{A}+",
             "GETIMPORT": __GETIMPORT_handler,
             "GETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
             "SETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
-            "GETTABLEKS": lambda _: f"R{A} = R{B}[{repr(string_table[aux])}"
-            if aux is not None and aux < len(string_table)
-            else f"R{A} = R{B}[Invalid string index]",
-            "SETTABLEKS": lambda _: f"R{B}[{repr(string_table[aux - 1])}] = R{A}"
-            if aux is not None and aux - 1 < len(string_table)
-            else f"R{B}[Invalid string index] = R{A}",
+            "GETTABLEKS": lambda _, curr_aux=aux, curr_A=A, curr_B=B: (
+                f"R{curr_A} = R{curr_B}[{repr(proto['kTable'][curr_aux]['value'])}]"
+                if curr_aux is not None and curr_aux < len(proto['kTable'])
+                else f"R{curr_A} = R{curr_B}[Invalid constant index]"
+            ),
+            "SETTABLEKS": lambda _, curr_aux=aux, curr_A=A, curr_B=B: (
+                f"R{curr_B}[{repr(proto['kTable'][curr_aux]['value'])}] = R{curr_A}"
+                if curr_aux is not None and curr_aux < len(proto['kTable'])
+                else f"R{curr_B}[Invalid constant index] = R{curr_A}"
+            ),
             "GETTABLEN": lambda _: f"R{A} = R{B}[{C + 1}]",
             "SETTABLEN": lambda _: f"R{B}[{C + 1}] = R{A}",
             "NEWCLOSURE": lambda _: f"R{A} = closure(proto[{Bx}])",
-            "NAMECALL": lambda _: f"R{A} = R{B}[{repr(string_table[aux])}; R{A+1} = R{B}"
-            if aux is not None and aux < len(string_table)
-            else f"R{A} = R{B}[Invalid String Index]; R{A+1} = R{B}",
+            "NAMECALL": lambda _, curr_aux=aux, curr_A=A, curr_B=B: (
+                f"R{curr_A} = R{curr_B}[{repr(proto['kTable'][curr_aux]['value'])}]; R{curr_A+1} = R{curr_B}"
+                if curr_aux is not None and curr_aux < len(proto['kTable'])
+                else f"R{curr_A} = R{curr_B}[Invalid constant index]; R{curr_A+1} = R{curr_B}"
+            ),
             "CALL": __CALL_handler,
             "RETURN": lambda _: f"return R{A} ..."
             if B == 0
