@@ -131,11 +131,12 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
     proto["kTable"] = [
         read_constant(reader, string_table) for _ in range(proto["sizeConsts"])
     ]
+    debug(f"v5: kTable for proto has {len(proto['kTable'])} constants:")
+    for idx, const in enumerate(proto["kTable"]):
+        debug(f"  [{idx}] type={const.get('type', '?')}, value={const.get('value', 'MISSING')}")
 
     proto["sizeProtos"] = reader.nextVarInt()
-    proto["pTable"] = proto["sizeProtos"] > 1 and [
-        proto["pTable"][reader.nextVarInt() - 1] for _ in range(proto["sizeProtos"])
-    ] or []
+    proto["pTable"] = []
 
     proto["lineDefined"] = reader.nextVarInt()
     proto["source"] = read_proto_source(reader, string_table)
@@ -149,7 +150,9 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
 
 def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
     k = {"type": reader.nextByte()}
-    if k["type"] == LBC_CONSTANT_BOOLEAN:
+    if k["type"] == LBC_CONSTANT_NIL:
+        k["value"] = None
+    elif k["type"] == LBC_CONSTANT_BOOLEAN:
         k["value"] = reader.nextByte() == 1
     elif k["type"] == LBC_CONSTANT_NUMBER:
         k["value"] = reader.nextDouble()
@@ -643,7 +646,7 @@ def read_proto(
     if len(proto["kTable"]) > 0:
         output += "--< Constants >--\n"
         constant_types = {
-            LBC_CONSTANT_NIL: "nil",
+            LBC_CONSTANT_NIL: lambda k: "nil",
             LBC_CONSTANT_BOOLEAN: lambda k: str(k["value"]).lower(),
             LBC_CONSTANT_NUMBER: lambda k: k["value"],
             LBC_CONSTANT_STRING: lambda k: repr(k["value"]),
@@ -658,10 +661,14 @@ def read_proto(
             )(k)
             output += f"{'    ' * depth}[{i}] = {value}\n"
 
-    if "sizeProtos" in proto and proto["sizeProtos"] > 1:
+    if "sizeProtos" in proto and proto["sizeProtos"] > 0:
         output += "--< Protos >--\n"
-        for i, p in enumerate(proto["pTable"]):
-            output += f"{'    ' * depth}[{i}] = {read_proto(p, depth + 1, proto_table, string_table, luau_version)}\n"
+        for i, proto_idx in enumerate(proto["pTable"]):
+            if proto_idx < len(proto_table):
+                child_proto = proto_table[proto_idx]
+                output += f"{'    ' * depth}[{i}] = {read_proto(child_proto, depth + 1, proto_table, string_table, luau_version)}\n"
+            else:
+                output += f"{'    ' * depth}[{i}] = <invalid proto index {proto_idx}>\n"
 
     if proto["numUpValues"] > 0:
         output += "--< Upvalues >--\n"
