@@ -788,18 +788,18 @@ def decompile(
             elif opname == "MOVE":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = R{B}")
             elif opname == "GETGLOBAL":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}R{A} = _G[{repr(stringTable[aux])}]"
+                        f"{add_tab_space(depth + 1)}R{A} = _G[{repr(proto['kTable'][aux]['value'])}]"
                     )
                 else:
                     output.append(
-                        f"{add_tab_space(depth + 1)}R{A} = _G[Invalid string index]"
+                        f"{add_tab_space(depth + 1)}R{A} = _G[Invalid constant index]"
                     )
             elif opname == "SETGLOBAL":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}_G[{repr(stringTable[aux])}] = R{A}"
+                        f"{add_tab_space(depth + 1)}_G[{repr(proto['kTable'][aux]['value'])}] = R{A}"
                     )
                 else:
                     output.append(
@@ -820,18 +820,18 @@ def decompile(
             elif opname == "SETTABLE":
                 output.append(f"{add_tab_space(depth + 1)}R{B}[R{C}] = R{A}")
             elif opname == "GETTABLEKS":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(stringTable[aux])}]"
+                        f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(proto['kTable'][aux]['value'])}]"
                     )
                 else:
                     output.append(
                         f"{add_tab_space(depth + 1)}R{A} = R{B}[Invalid string index]"
                     )
             elif opname == "SETTABLEKS":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}R{B}[{repr(stringTable[aux])}] = R{A}"
+                        f"{add_tab_space(depth + 1)}R{B}[{repr(proto['kTable'][aux]['value'])}] = R{A}"
                     )
                 else:
                     output.append(
@@ -844,18 +844,34 @@ def decompile(
             elif opname == "NEWCLOSURE":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = closure(proto[{Bx}])")
             elif opname == "NAMECALL":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(stringTable[aux])}]; R{A+1} = R{B}"
+                        f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(proto['kTable'][aux]['value'])}]; R{A+1} = R{B}"
                     )
                 else:
                     output.append(
                         f"{add_tab_space(depth + 1)}R{A} = R{B}[Invalid string index]; R{A+1} = R{B}"
                     )
             elif opname == "CALL":
-                args = f"R{A+1}" + (f" ... R{A+C-1}" if C > 1 else "")
-                returns = f"R{A}" + (f" ... R{A+B-2}" if B > 1 else "")
-                output.append(f"{add_tab_space(depth + 1)}{returns} = R{A}({args})")
+                if B == 1:
+                    args = ""
+                elif B == 0:
+                    args = f"R{A+1} ..."
+                else:
+                    args = f"R{A+1}" + (f" ... R{A+B-1}" if B > 2 else "")
+                
+                if C == 0:
+                    returns = f"R{A} ..."
+                elif C == 1:
+                    returns = ""
+                else:
+                    returns = f"R{A}" + (f" ... R{A+C-2}" if C > 2 else "")
+                
+                call_str = f"R{A}({args})"
+                if returns:
+                    output.append(f"{add_tab_space(depth + 1)}{returns} = {call_str}")
+                else:
+                    output.append(f"{add_tab_space(depth + 1)}{call_str}")
             elif opname == "RETURN":
                 if B == 0:
                     output.append(f"{add_tab_space(depth + 1)}return R{A} ...")
@@ -1109,9 +1125,9 @@ def decompile(
                     f"{add_tab_space(depth + 1)}if R{A} == {aux} then goto [{(code_index + 2 + sAx) & 0xFF}]"
                 )
             elif opname == "JUMPXEQKS":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}if R{A} == {repr(stringTable[aux])} then goto [{(code_index + 2 + sAx) & 0xFF}]"
+                        f"{add_tab_space(depth + 1)}if R{A} == {repr(proto['kTable'][aux]['value'])} then goto [{(code_index + 2 + sAx) & 0xFF}]"
                     )
                 else:
                     output.append(
