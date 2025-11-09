@@ -120,6 +120,7 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
     proto["numUpValues"] = reader.nextByte()
     proto["isVarArg"] = reader.nextByte()
     proto["flags"] = reader.nextByte()
+    
     typesize = reader.nextVarInt()
     type_info = [reader.nextByte() for _ in range(typesize)]
     proto["typeInfo"] = type_info
@@ -149,6 +150,7 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
 
 
 def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
+    pos_before = reader.pos
     k = {"type": reader.nextByte()}
     if k["type"] == LBC_CONSTANT_NIL:
         k["value"] = None
@@ -167,9 +169,10 @@ def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
     elif k["type"] == LBC_CONSTANT_IMPORT:
         k["value"] = reader.nextInt()
     elif k["type"] == LBC_CONSTANT_TABLE:
+        size = reader.nextVarInt()
         k["value"] = {
-            "size": reader.nextVarInt(),
-            "ids": [reader.nextVarInt() + 1 for _ in range(reader.nextVarInt())],
+            "size": size,
+            "ids": [reader.nextVarInt() for _ in range(size)],
         }
     elif k["type"] == LBC_CONSTANT_CLOSURE:
         k["value"] = reader.nextVarInt() + 1
@@ -177,6 +180,7 @@ def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
         k["value"] = [reader.nextFloat() for _ in range(4)]
     elif k["type"] != 0:
         raise ValueError(f"Unrecognized constant type: {k['type']}")
+    pos_after = reader.pos
     return k
 
 

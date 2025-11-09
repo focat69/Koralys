@@ -24,16 +24,28 @@ luau_compiler_path_v630 = compilers_path.joinpath(
 
 
 def compile_luau_to_bytecode(
-    input_file: Path, output_file: Path, use_bytecode_v5=False
-):
+    input_file: Path, output_file: Path, use_bytecode_v5=False, optimization_level=0, debug_level=0):
     """
     Compiles a Lua script to bytecode using the Luau compiler and saves it to output_file.
+    
+    Args:
+        input_file: Path to the .luau source file
+        output_file: Path where compiled bytecode will be saved
+        use_bytecode_v5: If True, use v5 compiler (0.630), else use v6 (0.666)
+        optimization_level: 0-2, higher = more optimizations (default: 0)
+        debug_level: 0-2, higher = more debug info (default: 0)
     """
     try:
         compiler_path = (
             use_bytecode_v5 and luau_compiler_path_v630 or luau_compiler_path
         )
-        command = [compiler_path, "--binary", "-O0", "-g0", input_file]
+        command = [
+            compiler_path, 
+            "--binary", 
+            f"-O{optimization_level}", 
+            f"-g{debug_level}", 
+            input_file
+        ]
 
         with open(output_file, "wb") as f:
             subprocess.run(command, stdout=f, check=True)
@@ -78,7 +90,7 @@ def download_compiler(version: str, destination: Path):
             print(f"Your OS {os.name} isn't supported.")
             print(
                 "Supported OSes (3) are: NT / Windows (garbage), ",
-                "POSIX/Linux",
+                "POSIX/Linux",  
                 ", and MacOS (please don't, you'll thank me later).",
             )
             print("You probably have to compile Luau yourself.")
@@ -118,7 +130,20 @@ def download_compiler_if_not_present(version: str, destination: Path):
 
 
 if __name__ == "__main__":
+    import sys
+    
     download_compiler_if_not_present(compiler_version_full, luau_compiler_path)
     download_compiler_if_not_present(compiler_version_v5_full, luau_compiler_path_v630)
-    compile_luau_to_bytecode(input_lua, output_bin_v5, True)
-    compile_luau_to_bytecode(input_lua, output_bin_v6)
+    
+    opt_level = 0
+    debug_level = 0
+    
+    for arg in sys.argv[1:]:
+        if arg.startswith("-O"):
+            opt_level = int(arg[2]) if len(arg) > 2 else 2
+        elif arg.startswith("-g"):
+            debug_level = int(arg[2]) if len(arg) > 2 else 2
+    
+    print(f"Compiling with optimization level: {opt_level}, debug level: {debug_level}")
+    compile_luau_to_bytecode(input_lua, output_bin_v5, True, opt_level, debug_level)
+    compile_luau_to_bytecode(input_lua, output_bin_v6, False, opt_level, debug_level)
