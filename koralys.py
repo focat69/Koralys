@@ -120,6 +120,7 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
     proto["numUpValues"] = reader.nextByte()
     proto["isVarArg"] = reader.nextByte()
     proto["flags"] = reader.nextByte()
+    
     typesize = reader.nextVarInt()
     type_info = [reader.nextByte() for _ in range(typesize)]
     proto["typeInfo"] = type_info
@@ -131,11 +132,12 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
     proto["kTable"] = [
         read_constant(reader, string_table) for _ in range(proto["sizeConsts"])
     ]
+    debug(f"v5: kTable for proto has {len(proto['kTable'])} constants:")
+    for idx, const in enumerate(proto["kTable"]):
+        debug(f"  [{idx}] type={const.get('type', '?')}, value={const.get('value', 'MISSING')}")
 
     proto["sizeProtos"] = reader.nextVarInt()
-    proto["pTable"] = proto["sizeProtos"] > 1 and [
-        proto["pTable"][reader.nextVarInt() - 1] for _ in range(proto["sizeProtos"])
-    ] or []
+    proto["pTable"] = []
 
     proto["lineDefined"] = reader.nextVarInt()
     proto["source"] = read_proto_source(reader, string_table)
@@ -148,13 +150,17 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
 
 
 def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
+    pos_before = reader.pos
     k = {"type": reader.nextByte()}
-    if k["type"] == LBC_CONSTANT_BOOLEAN:
+    if k["type"] == LBC_CONSTANT_NIL:
+        k["value"] = None
+    elif k["type"] == LBC_CONSTANT_BOOLEAN:
         k["value"] = reader.nextByte() == 1
     elif k["type"] == LBC_CONSTANT_NUMBER:
         k["value"] = reader.nextDouble()
     elif k["type"] == LBC_CONSTANT_STRING:
-        index = reader.nextVarInt() - 1
+        raw_index = reader.nextVarInt()
+        index = raw_index - 1
         k["value"] = (
             string_table[index]
             if 0 <= index < len(string_table)
@@ -163,9 +169,10 @@ def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
     elif k["type"] == LBC_CONSTANT_IMPORT:
         k["value"] = reader.nextInt()
     elif k["type"] == LBC_CONSTANT_TABLE:
+        size = reader.nextVarInt()
         k["value"] = {
-            "size": reader.nextVarInt(),
-            "ids": [reader.nextVarInt() + 1 for _ in range(reader.nextVarInt())],
+            "size": size,
+            "ids": [reader.nextVarInt() for _ in range(size)],
         }
     elif k["type"] == LBC_CONSTANT_CLOSURE:
         k["value"] = reader.nextVarInt() + 1
@@ -173,6 +180,7 @@ def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
         k["value"] = [reader.nextFloat() for _ in range(4)]
     elif k["type"] != 0:
         raise ValueError(f"Unrecognized constant type: {k['type']}")
+    pos_after = reader.pos
     return k
 
 
@@ -472,10 +480,14 @@ def read_proto(
             Returns:
                 str: A formatted string representing the conditional jump statement.
             """
+            op_map = {"EQ": "==", "LE": "<=", "LT": "<"}
+            current_A = A
+            current_aux = aux
             pre_op = " not " if invert else " "
             jump = opcode_handlers["JUMP"]("JUMP")
-            after_cond = op and f" {op} {k_mode and f'K{aux}' or aux} " or " "
-            return f"if{pre_op}R{A}{after_cond}then {jump}"
+            operator = op_map.get(op, op) if op else ""
+            after_cond = operator and f" {operator} {k_mode and f'K{current_aux}' or f'R{current_aux}'} " or " "
+            return f"if{pre_op}R{current_A}{after_cond}then {jump}"
 
         def jumpx_if_gen(value: str):
             jump = opcode_handlers["JUMPX"]("JUMPX")
@@ -495,30 +507,40 @@ def read_proto(
             "LOADN": lambda _: f"R{A} = {Bx}",
             "LOADK": lambda _: f"R{A} = {Bx}",
             "MOVE": lambda _: f"R{A} = R{B}",
-            "GETGLOBAL": lambda _: f"R{A} = _G[{repr(string_table[aux])}]"
-            if aux is not None and aux < len(string_table)
-            else f"R{A} = _G[Invalid string index]",
-            "SETGLOBAL": lambda _: f"_G[{repr(string_table[aux])}]"
-            if aux is not None and aux < len(string_table)
-            else f"_G[Invalid string index] = R{A}",
+            "GETGLOBAL": lambda _, curr_aux=aux, curr_A=A: (
+                f"R{curr_A} = _G[{repr(proto['kTable'][curr_aux]['value'])}]"
+                if curr_aux is not None and curr_aux < len(proto['kTable'])
+                else f"R{curr_A} = _G[Invalid constant index]"
+            ),
+            "SETGLOBAL": lambda _, curr_aux=aux, curr_A=A: (
+                f"_G[{repr(proto['kTable'][curr_aux]['value'])}] = R{curr_A}"
+                if curr_aux is not None and curr_aux < len(proto['kTable'])
+                else f"_G[Invalid constant index] = R{curr_A}"
+            ),
             "GETUPVAL": lambda _: f"R{A} = U{B}",
             "SETUPVAL": lambda _: f"U{B} = R{A}",
             "CLOSEUPVALS": lambda _: f"close upvalues R{A}+",
             "GETIMPORT": __GETIMPORT_handler,
             "GETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
             "SETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
-            "GETTABLEKS": lambda _: f"R{A} = R{B}[{repr(string_table[aux])}"
-            if aux is not None and aux < len(string_table)
-            else f"R{A} = R{B}[Invalid string index]",
-            "SETTABLEKS": lambda _: f"R{B}[{repr(string_table[aux - 1])}] = R{A}"
-            if aux is not None and aux - 1 < len(string_table)
-            else f"R{B}[Invalid string index] = R{A}",
+            "GETTABLEKS": lambda _, curr_aux=aux, curr_A=A, curr_B=B: (
+                f"R{curr_A} = R{curr_B}[{repr(proto['kTable'][curr_aux]['value'])}]"
+                if curr_aux is not None and curr_aux < len(proto['kTable'])
+                else f"R{curr_A} = R{curr_B}[Invalid constant index]"
+            ),
+            "SETTABLEKS": lambda _, curr_aux=aux, curr_A=A, curr_B=B: (
+                f"R{curr_B}[{repr(proto['kTable'][curr_aux]['value'])}] = R{curr_A}"
+                if curr_aux is not None and curr_aux < len(proto['kTable'])
+                else f"R{curr_B}[Invalid constant index] = R{curr_A}"
+            ),
             "GETTABLEN": lambda _: f"R{A} = R{B}[{C + 1}]",
             "SETTABLEN": lambda _: f"R{B}[{C + 1}] = R{A}",
             "NEWCLOSURE": lambda _: f"R{A} = closure(proto[{Bx}])",
-            "NAMECALL": lambda _: f"R{A} = R{B}[{repr(string_table[aux])}; R{A+1} = R{B}"
-            if aux is not None and aux < len(string_table)
-            else f"R{A} = R{B}[Invalid String Index]; R{A+1} = R{B}",
+            "NAMECALL": lambda _, curr_aux=aux, curr_A=A, curr_B=B: (
+                f"R{curr_A} = R{curr_B}[{repr(proto['kTable'][curr_aux]['value'])}]; R{curr_A+1} = R{curr_B}"
+                if curr_aux is not None and curr_aux < len(proto['kTable'])
+                else f"R{curr_A} = R{curr_B}[Invalid constant index]; R{curr_A+1} = R{curr_B}"
+            ),
             "CALL": __CALL_handler,
             "RETURN": lambda _: f"return R{A} ..."
             if B == 0
@@ -565,8 +587,8 @@ def read_proto(
         }
 
         for condition in ["EQ", "LE", "LT", None]:
-            opcode_handlers[f"JUMPIF{condition or ''}"] = lambda _: jump_if_gen(condition)
-            opcode_handlers[f"JUMPIFNOT{condition or ''}"] = lambda _: jump_if_gen(condition, True)
+            opcode_handlers[f"JUMPIF{condition or ''}"] = lambda _, cond=condition: jump_if_gen(cond)
+            opcode_handlers[f"JUMPIFNOT{condition or ''}"] = lambda _, cond=condition: jump_if_gen(cond, True)
 
         for gen_op_name in ["AND", "OR"]:
             def __gen_op_handler(gen_op_name: str):
@@ -628,7 +650,7 @@ def read_proto(
     if len(proto["kTable"]) > 0:
         output += "--< Constants >--\n"
         constant_types = {
-            LBC_CONSTANT_NIL: "nil",
+            LBC_CONSTANT_NIL: lambda k: "nil",
             LBC_CONSTANT_BOOLEAN: lambda k: str(k["value"]).lower(),
             LBC_CONSTANT_NUMBER: lambda k: k["value"],
             LBC_CONSTANT_STRING: lambda k: repr(k["value"]),
@@ -643,10 +665,14 @@ def read_proto(
             )(k)
             output += f"{'    ' * depth}[{i}] = {value}\n"
 
-    if "sizeProtos" in proto and proto["sizeProtos"] > 1:
+    if "sizeProtos" in proto and proto["sizeProtos"] > 0:
         output += "--< Protos >--\n"
-        for i, p in enumerate(proto["pTable"]):
-            output += f"{'    ' * depth}[{i}] = {read_proto(p, depth + 1, proto_table, string_table, luau_version)}\n"
+        for i, proto_idx in enumerate(proto["pTable"]):
+            if proto_idx < len(proto_table):
+                child_proto = proto_table[proto_idx]
+                output += f"{'    ' * depth}[{i}] = {read_proto(child_proto, depth + 1, proto_table, string_table, luau_version)}\n"
+            else:
+                output += f"{'    ' * depth}[{i}] = <invalid proto index {proto_idx}>\n"
 
     if proto["numUpValues"] > 0:
         output += "--< Upvalues >--\n"
@@ -762,18 +788,18 @@ def decompile(
             elif opname == "MOVE":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = R{B}")
             elif opname == "GETGLOBAL":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}R{A} = _G[{repr(stringTable[aux])}]"
+                        f"{add_tab_space(depth + 1)}R{A} = _G[{repr(proto['kTable'][aux]['value'])}]"
                     )
                 else:
                     output.append(
-                        f"{add_tab_space(depth + 1)}R{A} = _G[Invalid string index]"
+                        f"{add_tab_space(depth + 1)}R{A} = _G[Invalid constant index]"
                     )
             elif opname == "SETGLOBAL":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}_G[{repr(stringTable[aux])}] = R{A}"
+                        f"{add_tab_space(depth + 1)}_G[{repr(proto['kTable'][aux]['value'])}] = R{A}"
                     )
                 else:
                     output.append(
@@ -794,18 +820,18 @@ def decompile(
             elif opname == "SETTABLE":
                 output.append(f"{add_tab_space(depth + 1)}R{B}[R{C}] = R{A}")
             elif opname == "GETTABLEKS":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(stringTable[aux])}]"
+                        f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(proto['kTable'][aux]['value'])}]"
                     )
                 else:
                     output.append(
                         f"{add_tab_space(depth + 1)}R{A} = R{B}[Invalid string index]"
                     )
             elif opname == "SETTABLEKS":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}R{B}[{repr(stringTable[aux])}] = R{A}"
+                        f"{add_tab_space(depth + 1)}R{B}[{repr(proto['kTable'][aux]['value'])}] = R{A}"
                     )
                 else:
                     output.append(
@@ -818,18 +844,34 @@ def decompile(
             elif opname == "NEWCLOSURE":
                 output.append(f"{add_tab_space(depth + 1)}R{A} = closure(proto[{Bx}])")
             elif opname == "NAMECALL":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(stringTable[aux])}]; R{A+1} = R{B}"
+                        f"{add_tab_space(depth + 1)}R{A} = R{B}[{repr(proto['kTable'][aux]['value'])}]; R{A+1} = R{B}"
                     )
                 else:
                     output.append(
                         f"{add_tab_space(depth + 1)}R{A} = R{B}[Invalid string index]; R{A+1} = R{B}"
                     )
             elif opname == "CALL":
-                args = f"R{A+1}" + (f" ... R{A+C-1}" if C > 1 else "")
-                returns = f"R{A}" + (f" ... R{A+B-2}" if B > 1 else "")
-                output.append(f"{add_tab_space(depth + 1)}{returns} = R{A}({args})")
+                if B == 1:
+                    args = ""
+                elif B == 0:
+                    args = f"R{A+1} ..."
+                else:
+                    args = f"R{A+1}" + (f" ... R{A+B-1}" if B > 2 else "")
+                
+                if C == 0:
+                    returns = f"R{A} ..."
+                elif C == 1:
+                    returns = ""
+                else:
+                    returns = f"R{A}" + (f" ... R{A+C-2}" if C > 2 else "")
+                
+                call_str = f"R{A}({args})"
+                if returns:
+                    output.append(f"{add_tab_space(depth + 1)}{returns} = {call_str}")
+                else:
+                    output.append(f"{add_tab_space(depth + 1)}{call_str}")
             elif opname == "RETURN":
                 if B == 0:
                     output.append(f"{add_tab_space(depth + 1)}return R{A} ...")
@@ -1083,9 +1125,9 @@ def decompile(
                     f"{add_tab_space(depth + 1)}if R{A} == {aux} then goto [{(code_index + 2 + sAx) & 0xFF}]"
                 )
             elif opname == "JUMPXEQKS":
-                if aux is not None and aux < len(stringTable):
+                if aux is not None and aux < len(proto['kTable']):
                     output.append(
-                        f"{add_tab_space(depth + 1)}if R{A} == {repr(stringTable[aux])} then goto [{(code_index + 2 + sAx) & 0xFF}]"
+                        f"{add_tab_space(depth + 1)}if R{A} == {repr(proto['kTable'][aux]['value'])} then goto [{(code_index + 2 + sAx) & 0xFF}]"
                     )
                 else:
                     output.append(
