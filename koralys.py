@@ -573,7 +573,9 @@ def read_proto(
             "MINUS": lambda _: f"R{A} = -R{B}",
             "LENGTH": lambda _: f"R{A} = #R{B}",
             # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2134-L2136
-            "NEWTABLE": lambda _: f"R{A} = table with {(B == 0 and 0 or 1 << max(0, B - 1)) + 1} entries",
+            "NEWTABLE": lambda _, curr_aux=aux: (
+                f"R{A} = {{}} -- hash={0 if B == 0 else 1 << (B - 1)}, array={curr_aux if curr_aux is not None else 0}"
+            ),
             "DUPTABLE": lambda _: f"R{A} = K{Bx} -- duplicate",
             "SETLIST": lambda _: f"R{A}[{C}] = R{A+1} ... R{A+B}",
             "CONCAT": lambda _: f"R{A} = R{B} .. R{C}",
