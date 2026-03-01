@@ -579,7 +579,12 @@ def read_proto(
             "CONCAT": lambda _: f"R{A} = R{B} .. R{C}",
             "NOT": lambda _: f"R{A} = not R{B}",
             "FORGPREP": lambda _: f"R{A} = R{A+1}; R{A+1} = R{A+2}; R{A+2} = R{A+3}; R{A+3} = nil; goto [{(codeIndex + 1 + Bx) & 0xFF}]",
-            "FORGLOOP": lambda _: f"R{A+3}, ..., R{A+2+C} = R{A}(R{A+1}, R{A+2}); if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{(codeIndex + 1 - Bx) & 0xFF}]",
+            "FORGLOOP": lambda _, curr_aux=aux: (
+                f"R{A+3}, ..., R{A+2+(curr_aux & 0x7F)} = R{A}(R{A+1}, R{A+2}); "
+                f"if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{codeIndex + 1 + sBx}]"
+                if curr_aux is not None
+                else f"R{A+3}, ... = R{A}(R{A+1}, R{A+2}); goto [{codeIndex + 1 + sBx}]"
+            ),
             "FORGPREP_INEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
             "NATIVECALL": lambda _: "Unimplemented",
             # (yes, `B - 1` can return -1, but the Luau disassembler does this so hopefully it's fine)
