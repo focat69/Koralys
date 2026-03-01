@@ -137,7 +137,7 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
         debug(f"  [{idx}] type={const.get('type', '?')}, value={const.get('value', 'MISSING')}")
 
     proto["sizeProtos"] = reader.nextVarInt()
-    proto["pTable"] = []
+    proto["pTable"] = [reader.nextVarInt() for _ in range(proto["sizeProtos"])]
 
     proto["lineDefined"] = reader.nextVarInt()
     proto["source"] = read_proto_source(reader, string_table)
