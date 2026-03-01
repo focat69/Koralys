@@ -17,7 +17,7 @@ If you'd like to compile your script, please refer to the `/compile` directory.
   - Discord: @focat (676960182621962271)
   - GitHub: [focat69](https://github.com/focat69)
 - **Jiface**
-  - Discord: @_jifacepellyfreckles (1233718214714724385)
+  - Discord: @cephalocone (1460413830394937477)
   - GitHub: [ssynical](https://github.com/ssynical)
 - **DataModell**
   - Discord: @datamodel (773207810120089600)
@@ -42,3 +42,4 @@ The `DEBUG` flag is meant for development purposes only. Turn off before using i
 - Does not handle variables kindly
 
 Please contribute and fix these bugs and more that you may find
+

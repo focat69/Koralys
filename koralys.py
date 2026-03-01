@@ -137,7 +137,7 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
         debug(f"  [{idx}] type={const.get('type', '?')}, value={const.get('value', 'MISSING')}")
 
     proto["sizeProtos"] = reader.nextVarInt()
-    proto["pTable"] = []
+    proto["pTable"] = [reader.nextVarInt() for _ in range(proto["sizeProtos"])]
 
     proto["lineDefined"] = reader.nextVarInt()
     proto["source"] = read_proto_source(reader, string_table)
@@ -505,7 +505,11 @@ def read_proto(
             "LOADB": lambda _: f"R{A} = {bool(B)}; "
             + (f"goto [{codeIndex + C + 1}]" if C != 0 else ""),
             "LOADN": lambda _: f"R{A} = {Bx}",
-            "LOADK": lambda _: f"R{A} = {Bx}",
+            "LOADK": lambda _: (
+                f"R{A} = {repr(proto['kTable'][Bx]['value']) if isinstance(proto['kTable'][Bx]['value'], str) else proto['kTable'][Bx]['value']}"
+                if Bx < len(proto["kTable"])
+                else f"R{A} = K{Bx}"
+            ),
             "MOVE": lambda _: f"R{A} = R{B}",
             "GETGLOBAL": lambda _, curr_aux=aux, curr_A=A: (
                 f"R{curr_A} = _G[{repr(proto['kTable'][curr_aux]['value'])}]"
@@ -522,7 +526,7 @@ def read_proto(
             "CLOSEUPVALS": lambda _: f"close upvalues R{A}+",
             "GETIMPORT": __GETIMPORT_handler,
             "GETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
-            "SETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
+            "SETTABLE": lambda _: f"R{B}[R{C}] = R{A}",
             "GETTABLEKS": lambda _, curr_aux=aux, curr_A=A, curr_B=B: (
                 f"R{curr_A} = R{curr_B}[{repr(proto['kTable'][curr_aux]['value'])}]"
                 if curr_aux is not None and curr_aux < len(proto['kTable'])
@@ -547,9 +551,9 @@ def read_proto(
             else "return"
             if B == 1
             else f"return R{A} ... R{A+B-2}",
-            "JUMP": lambda _: f"goto [{(codeIndex + 1 + sBx) & 0xFF}]",
-            "JUMPBACK": lambda _: f"goto [{(codeIndex + 1 - sBx) & 0xFF}]",
-            "JUMPX": lambda _: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]",
+            "JUMP": lambda _: f"goto [{codeIndex + 1 + sBx}]",
+            "JUMPBACK": lambda _: f"goto [{codeIndex + 1 + sBx}]",
+            "JUMPX": lambda _: f"goto [{codeIndex + 1 + sAx}]",
             "JUMPXEQKNIL": lambda _: jumpx_if_gen("nil"),
             "JUMPXEQKB": lambda _: jumpx_if_gen(str(bool(B)).lower()),
             "JUMPXEQKN": lambda _: jumpx_if_gen(aux),
@@ -564,26 +568,33 @@ def read_proto(
             "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
             "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True),
-            "FORNPREP": lambda _: f"R{A} -= R{A+2}; goto [{(codeIndex + 1 + Bx) & 0xFF}]",
-            "FORNLOOP": lambda _: f"R{A} += R{A+2}; if R{A} <= R{A+1} then goto [{(codeIndex + 1 - Bx) & 0xFF}]; R{A+3} = R{A}",
+            "FORNPREP": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
+            "FORNLOOP": lambda _: f"... goto [{codeIndex + 1 + sBx}]; ...",
             "MINUS": lambda _: f"R{A} = -R{B}",
             "LENGTH": lambda _: f"R{A} = #R{B}",
             # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2134-L2136
-            "NEWTABLE": lambda _: f"R{A} = table with {(B == 0 and 0 or 1 << max(0, B - 1)) + 1} entries",
-            "DUPTABLE": lambda _: f"R{A} = R{B} -- duplicate",
+            "NEWTABLE": lambda _, curr_aux=aux: (
+                f"R{A} = {{}} -- hash={0 if B == 0 else 1 << (B - 1)}, array={curr_aux if curr_aux is not None else 0}"
+            ),
+            "DUPTABLE": lambda _: f"R{A} = K{Bx} -- duplicate",
             "SETLIST": lambda _: f"R{A}[{C}] = R{A+1} ... R{A+B}",
             "CONCAT": lambda _: f"R{A} = R{B} .. R{C}",
             "NOT": lambda _: f"R{A} = not R{B}",
-            "FORGPREP": lambda _: f"R{A} = R{A+1}; R{A+1} = R{A+2}; R{A+2} = R{A+3}; R{A+3} = nil; goto [{(codeIndex + 1 + Bx) & 0xFF}]",
-            "FORGLOOP": lambda _: f"R{A+3}, ..., R{A+2+C} = R{A}(R{A+1}, R{A+2}); if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{(codeIndex + 1 - Bx) & 0xFF}]",
-            "FORGPREP_INEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
+            "FORGPREP": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
+            "FORGLOOP": lambda _, curr_aux=aux: (
+                f"R{A+3}, ..., R{A+2+(curr_aux & 0x7F)} = R{A}(R{A+1}, R{A+2}); "
+                f"if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{codeIndex + 1 + sBx}]"
+                if curr_aux is not None
+                else f"R{A+3}, ... = R{A}(R{A+1}, R{A+2}); goto [{codeIndex + 1 + sBx}]"
+            ),
+            "FORGPREP_INEXT": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
             "NATIVECALL": lambda _: "Unimplemented",
             # (yes, `B - 1` can return -1, but the Luau disassembler does this so hopefully it's fine)
             # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2171-L2173
             "GETVARARGS": lambda _: f"R{A} = {B - 1}",
             "DUPCLOSURE": lambda _: f"R{A} = K{Bx} -- duplicate",
             "LOADKX": __LOADKX_handler,
-            "FORGPREP_NEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
+            "FORGPREP_NEXT": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
         }
 
         for condition in ["EQ", "LE", "LT", None]:
@@ -602,8 +613,7 @@ def read_proto(
                     return f"R{A} = R{B} {op} "\
                         f"{repr(k['value']) if isinstance(k['value'], str) else k['value']}"
                 else:
-                    return f"R{A} = R{B} {op} R{C} "\
-                        f"{repr(k['value']) if isinstance(k['value'], str) else k['value']}"
+                    return f"R{A} = R{B} {op} R{C}"
             opcode_handlers[gen_op_name] = __gen_op_handler
             opcode_handlers[f"{gen_op_name}K"] = __gen_op_handler
 

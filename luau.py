@@ -160,7 +160,11 @@ def get_arg_Bx(i: int) -> int:
 
 
 def get_arg_sBx(i: int) -> int:
-    return (i >> 16) - 131071
+    # luau D field is a 16-bit signed value in bits 16-31 (two's complement).
+    # the old code used - 131071 which is a lua 5.x bias for an 18-bit field;
+    # luau's encoding uses a standard 16 bit signed int
+    d = (i >> 16) & 0xFFFF
+    return d - 0x10000 if d >= 0x8000 else d
 
 
 def get_arg_sAx(i: int) -> int:
