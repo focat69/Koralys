@@ -551,9 +551,9 @@ def read_proto(
             else "return"
             if B == 1
             else f"return R{A} ... R{A+B-2}",
-            "JUMP": lambda _: f"goto [{(codeIndex + 1 + sBx) & 0xFF}]",
-            "JUMPBACK": lambda _: f"goto [{(codeIndex + 1 - sBx) & 0xFF}]",
-            "JUMPX": lambda _: f"goto [{(codeIndex + 1 + sAx) & 0xFF}]",
+            "JUMP": lambda _: f"goto [{codeIndex + 1 + sBx}]",
+            "JUMPBACK": lambda _: f"goto [{codeIndex + 1 + sBx}]",
+            "JUMPX": lambda _: f"goto [{codeIndex + 1 + sAx}]",
             "JUMPXEQKNIL": lambda _: jumpx_if_gen("nil"),
             "JUMPXEQKB": lambda _: jumpx_if_gen(str(bool(B)).lower()),
             "JUMPXEQKN": lambda _: jumpx_if_gen(aux),
@@ -568,8 +568,8 @@ def read_proto(
             "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
             "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True),
-            "FORNPREP": lambda _: f"R{A} -= R{A+2}; goto [{(codeIndex + 1 + Bx) & 0xFF}]",
-            "FORNLOOP": lambda _: f"R{A} += R{A+2}; if R{A} <= R{A+1} then goto [{(codeIndex + 1 - Bx) & 0xFF}]; R{A+3} = R{A}",
+            "FORNPREP": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
+            "FORNLOOP": lambda _: f"... goto [{codeIndex + 1 + sBx}]; ...",
             "MINUS": lambda _: f"R{A} = -R{B}",
             "LENGTH": lambda _: f"R{A} = #R{B}",
             # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2134-L2136
@@ -578,21 +578,21 @@ def read_proto(
             "SETLIST": lambda _: f"R{A}[{C}] = R{A+1} ... R{A+B}",
             "CONCAT": lambda _: f"R{A} = R{B} .. R{C}",
             "NOT": lambda _: f"R{A} = not R{B}",
-            "FORGPREP": lambda _: f"R{A} = R{A+1}; R{A+1} = R{A+2}; R{A+2} = R{A+3}; R{A+3} = nil; goto [{(codeIndex + 1 + Bx) & 0xFF}]",
+            "FORGPREP": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
             "FORGLOOP": lambda _, curr_aux=aux: (
                 f"R{A+3}, ..., R{A+2+(curr_aux & 0x7F)} = R{A}(R{A+1}, R{A+2}); "
                 f"if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{codeIndex + 1 + sBx}]"
                 if curr_aux is not None
                 else f"R{A+3}, ... = R{A}(R{A+1}, R{A+2}); goto [{codeIndex + 1 + sBx}]"
             ),
-            "FORGPREP_INEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
+            "FORGPREP_INEXT": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
             "NATIVECALL": lambda _: "Unimplemented",
             # (yes, `B - 1` can return -1, but the Luau disassembler does this so hopefully it's fine)
             # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2171-L2173
             "GETVARARGS": lambda _: f"R{A} = {B - 1}",
             "DUPCLOSURE": lambda _: f"R{A} = K{Bx} -- duplicate",
             "LOADKX": __LOADKX_handler,
-            "FORGPREP_NEXT": lambda _: f"R{A} = next; goto [{(codeIndex + 1 + B) & 0xFF}]",
+            "FORGPREP_NEXT": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
         }
 
         for condition in ["EQ", "LE", "LT", None]:
