@@ -505,7 +505,11 @@ def read_proto(
             "LOADB": lambda _: f"R{A} = {bool(B)}; "
             + (f"goto [{codeIndex + C + 1}]" if C != 0 else ""),
             "LOADN": lambda _: f"R{A} = {Bx}",
-            "LOADK": lambda _: f"R{A} = {Bx}",
+            "LOADK": lambda _: (
+                f"R{A} = {repr(proto['kTable'][Bx]['value']) if isinstance(proto['kTable'][Bx]['value'], str) else proto['kTable'][Bx]['value']}"
+                if Bx < len(proto["kTable"])
+                else f"R{A} = K{Bx}"
+            ),
             "MOVE": lambda _: f"R{A} = R{B}",
             "GETGLOBAL": lambda _, curr_aux=aux, curr_A=A: (
                 f"R{curr_A} = _G[{repr(proto['kTable'][curr_aux]['value'])}]"
