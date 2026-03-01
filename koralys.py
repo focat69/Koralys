@@ -526,7 +526,7 @@ def read_proto(
             "CLOSEUPVALS": lambda _: f"close upvalues R{A}+",
             "GETIMPORT": __GETIMPORT_handler,
             "GETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
-            "SETTABLE": lambda _: f"R{A} = R{B}[R{C}]",
+            "SETTABLE": lambda _: f"R{B}[R{C}] = R{A}",
             "GETTABLEKS": lambda _, curr_aux=aux, curr_A=A, curr_B=B: (
                 f"R{curr_A} = R{curr_B}[{repr(proto['kTable'][curr_aux]['value'])}]"
                 if curr_aux is not None and curr_aux < len(proto['kTable'])
