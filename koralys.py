@@ -602,8 +602,7 @@ def read_proto(
                     return f"R{A} = R{B} {op} "\
                         f"{repr(k['value']) if isinstance(k['value'], str) else k['value']}"
                 else:
-                    return f"R{A} = R{B} {op} R{C} "\
-                        f"{repr(k['value']) if isinstance(k['value'], str) else k['value']}"
+                    return f"R{A} = R{B} {op} R{C}"
             opcode_handlers[gen_op_name] = __gen_op_handler
             opcode_handlers[f"{gen_op_name}K"] = __gen_op_handler
 
