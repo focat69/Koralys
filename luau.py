@@ -168,4 +168,5 @@ def get_arg_sBx(i: int) -> int:
 
 
 def get_arg_sAx(i: int) -> int:
-    return i >> 8
+    e = (i >> 8) & 0xFFFFFF
+    return e - 0x1000000 if e >= 0x800000 else e
