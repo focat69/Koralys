@@ -501,8 +501,11 @@ def read_proto(
             "BREAK": lambda _: "break",
             "PREPVARARGS": lambda _: f"(adjust vararg params, {A} fixed params)",
             "LOADNIL": lambda _: f"R{A} = nil",
-            "LOADB": lambda _: f"R{A} = {bool(B)}; "
-            + (f"goto [{codeIndex + C + 1}]" if C != 0 else ""),
+            "LOADB": lambda _: (
+                f"R{A} = {bool(B)}; goto [{codeIndex + C + 1}]"
+                if C != 0
+                else f"R{A} = {bool(B)}"
+            ),
             "LOADN": lambda _: f"R{A} = {Bx}",
             "LOADK": lambda _: (
                 f"R{A} = {repr(proto['kTable'][Bx]['value']) if isinstance(proto['kTable'][Bx]['value'], str) else proto['kTable'][Bx]['value']}"
