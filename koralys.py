@@ -414,9 +414,29 @@ def read_proto(
             codeIndex += 1
 
         def __CALL_handler(_):
-            args = f"R{A+1}" + (f" ... R{A+B-1}" if B > 2 else "")
-            returns = f"R{A}" + (f" ... R{A+C}" if C > 1 else "")
-            return f"{returns} = R{A}({args})"
+            # B = nargs + 1 (0 = varargs to top), C = nresults + 1 (0 = multi-return)
+            if B == 0:
+                args = f"R{A+1} ... top"
+            elif B == 1:
+                args = ""
+            elif B == 2:
+                args = f"R{A+1}"
+            else:
+                args = f"R{A+1} ... R{A+B-1}"
+ 
+            if C == 0:
+                returns = f"R{A} ... top"
+            elif C == 1:
+                returns = ""
+            elif C == 2:
+                returns = f"R{A}"
+            else:
+                returns = f"R{A} ... R{A+C-2}"
+ 
+            if returns:
+                return f"{returns} = R{A}({args})"
+            else:
+                return f"R{A}({args})"
 
         def __CAPTURE_handler(_):
             capture_types = ["VAL", "REF", "UPVAL"]
