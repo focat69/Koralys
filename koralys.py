@@ -24,7 +24,6 @@ Turning on the `DEBUG` flag will slow down the decompilation process significant
 The `DEBUG` flag is meant for development purposes only. Turn off before using in production.
 
 Issues:
-    Makes everything a proto even if it isnt
     Decompile is broken/really bad/unfinished
     No type checking
     Does not handle variables kindly
@@ -488,9 +487,12 @@ def read_proto(
             after_cond = operator and f" {operator} {k_mode and f'K{current_aux}' or f'R{current_aux}'} " or " "
             return f"if{pre_op}R{current_A}{after_cond}then {jump}"
 
-        def jumpx_if_gen(value: str):
+        def jumpx_if_gen(value: str, curr_aux=None):
+            # aux bit 31 is the NOT flag for JUMPXEQK* instructions :sob:
+            not_flag = (curr_aux >> 31) & 1 if curr_aux is not None else 0
+            op = "~=" if not_flag else "=="
             jump = opcode_handlers["JUMPX"]("JUMPX")
-            return f"if R{A} == {value} then {jump}"
+            return f"if R{A} {op} {value} then {jump}"
 
         def __LOADKX_handler(_):
             k = proto["kTable"][aux] if aux < len(proto["kTable"]) else {"type": "nil", "value": "nil"}
@@ -501,8 +503,11 @@ def read_proto(
             "BREAK": lambda _: "break",
             "PREPVARARGS": lambda _: f"(adjust vararg params, {A} fixed params)",
             "LOADNIL": lambda _: f"R{A} = nil",
-            "LOADB": lambda _: f"R{A} = {bool(B)}; "
-            + (f"goto [{codeIndex + C + 1}]" if C != 0 else ""),
+            "LOADB": lambda _: (
+                f"R{A} = {bool(B)}; goto [{codeIndex + C + 1}]"
+                if C != 0
+                else f"R{A} = {bool(B)}"
+            ),
             "LOADN": lambda _: f"R{A} = {Bx}",
             "LOADK": lambda _: (
                 f"R{A} = {repr(proto['kTable'][Bx]['value']) if isinstance(proto['kTable'][Bx]['value'], str) else proto['kTable'][Bx]['value']}"
@@ -553,12 +558,28 @@ def read_proto(
             "JUMP": lambda _: f"goto [{codeIndex + 1 + sBx}]",
             "JUMPBACK": lambda _: f"goto [{codeIndex + 1 + sBx}]",
             "JUMPX": lambda _: f"goto [{codeIndex + 1 + sAx}]",
-            "JUMPXEQKNIL": lambda _: jumpx_if_gen("nil"),
-            "JUMPXEQKB": lambda _: jumpx_if_gen(str(bool(B)).lower()),
-            "JUMPXEQKN": lambda _: jumpx_if_gen(aux),
-            "JUMPXEQKS": lambda _: jumpx_if_gen(string_table[aux] \
-                    if aux is not None \
-                            and aux < len(string_table) else "Invalid string index"),
+            "JUMPXEQKNIL": lambda _, curr_aux=aux: jumpx_if_gen("nil", curr_aux),
+            "JUMPXEQKB": lambda _, curr_aux=aux: jumpx_if_gen(
+                str(bool(curr_aux & 1)).lower() if curr_aux is not None else "?",
+                curr_aux
+            ),
+            "JUMPXEQKN": lambda _, curr_aux=aux: (
+                jumpx_if_gen(
+                    (lambda k: repr(k['value']) if isinstance(k['value'], str) else str(k['value']))(
+                        proto['kTable'][(curr_aux & 0x7FFFFFFF)]
+                    ) if curr_aux is not None and (curr_aux & 0x7FFFFFFF) < len(proto['kTable'])
+                    else f"K{curr_aux}",
+                    curr_aux
+                )
+            ),
+            "JUMPXEQKS": lambda _, curr_aux=aux: (
+                jumpx_if_gen(
+                    repr(proto['kTable'][(curr_aux & 0x7FFFFFFF)]['value'])
+                    if curr_aux is not None and (curr_aux & 0x7FFFFFFF) < len(proto['kTable'])
+                    else f"K{curr_aux}",
+                    curr_aux
+                )
+            ),
             "FASTCALL": lambda _: f"R{A} = builtin[{C}]",
             "FASTCALL1": lambda _: f"R{A} = builtin[{C}](R{B})",
             "FASTCALL2": lambda _: f"R{A} = builtin[{C}](R{B}, R{aux})",
@@ -710,8 +731,16 @@ def disassemble(bytecode: bytes) -> Tuple[List[str], List[str], int, str]:
         bytecode
     )
 
+    # to figure out which protos are children we just check if they are referenced by another proto's pTable
+    child_proto_indices = set()
+    for proto in protoTable:
+        for child_idx in proto.get("pTable", []):
+            child_proto_indices.add(child_idx)
+
     protos = 0
     for i, proto in enumerate(protoTable):
+        if i in child_proto_indices:
+            continue  # skip child protos; they are shown inline by their parent
         output.extend(
             (
                 f"--< Proto->{i:03} | Line {proto.get('lineDefined', 0)} >--",

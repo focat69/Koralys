@@ -32,7 +32,6 @@ The `DEBUG` flag is meant for development purposes only. Turn off before using i
 
 ## Issues
 
-- Makes everything a proto even if it isn't
 - Decompile is broken/really bad/unfinished
 - No type checking
 - Does not handle variables kindly
