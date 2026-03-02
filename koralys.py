@@ -11,7 +11,7 @@ Written by:
         "Github": focat69
     })
     - Jiface ({
-        "Discord": @_jifacepellyfreckles, (1233718214714724385)
+        "Discord": @cephalocone, (1460413830394937477)
         "Github": ssynical
     })
     - DataModell ({
@@ -25,7 +25,6 @@ The `DEBUG` flag is meant for development purposes only. Turn off before using i
 
 Issues:
     Makes everything a proto even if it isnt
-    Does not show jump targets (eg. if code has goto [5] but only has 3 instructions, it doesnt show "::5::" and it's dism)
     Decompile is broken/really bad/unfinished
     No type checking
     Does not handle variables kindly
@@ -577,7 +576,11 @@ def read_proto(
                 f"R{A} = {{}} -- hash={0 if B == 0 else 1 << (B - 1)}, array={curr_aux if curr_aux is not None else 0}"
             ),
             "DUPTABLE": lambda _: f"R{A} = K{Bx} -- duplicate",
-            "SETLIST": lambda _: f"R{A}[{C}] = R{A+1} ... R{A+B}",
+            "SETLIST": lambda _, curr_aux=aux: (
+                f"R{A}[{curr_aux}..{curr_aux+C-2}] = R{B} ... R{B+C-2}"
+                if C > 0 and curr_aux is not None
+                else f"R{A}[..] = R{B} ... top"
+            ),
             "CONCAT": lambda _: f"R{A} = R{B} .. R{C}",
             "NOT": lambda _: f"R{A} = not R{B}",
             "FORGPREP": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
