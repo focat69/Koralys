@@ -24,7 +24,6 @@ Turning on the `DEBUG` flag will slow down the decompilation process significant
 The `DEBUG` flag is meant for development purposes only. Turn off before using in production.
 
 Issues:
-    Makes everything a proto even if it isnt
     Decompile is broken/really bad/unfinished
     No type checking
     Does not handle variables kindly
@@ -732,8 +731,16 @@ def disassemble(bytecode: bytes) -> Tuple[List[str], List[str], int, str]:
         bytecode
     )
 
+    # to figure out which protos are children we just check if they are referenced by another proto's pTable
+    child_proto_indices = set()
+    for proto in protoTable:
+        for child_idx in proto.get("pTable", []):
+            child_proto_indices.add(child_idx)
+
     protos = 0
     for i, proto in enumerate(protoTable):
+        if i in child_proto_indices:
+            continue  # skip child protos; they are shown inline by their parent
         output.extend(
             (
                 f"--< Proto->{i:03} | Line {proto.get('lineDefined', 0)} >--",
