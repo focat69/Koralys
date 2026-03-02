@@ -173,7 +173,7 @@ def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
             "ids": [reader.nextVarInt() for _ in range(size)],
         }
     elif k["type"] == LBC_CONSTANT_CLOSURE:
-        k["value"] = reader.nextVarInt() + 1
+        k["value"] = reader.nextVarInt()
     elif k["type"] == LBC_CONSTANT_VECTOR:
         k["value"] = [reader.nextFloat() for _ in range(4)]
     elif k["type"] != 0:
