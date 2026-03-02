@@ -491,7 +491,7 @@ def read_proto(
             # aux bit 31 is the NOT flag for JUMPXEQK* instructions :sob:
             not_flag = (curr_aux >> 31) & 1 if curr_aux is not None else 0
             op = "~=" if not_flag else "=="
-            jump = opcode_handlers["JUMPX"]("JUMPX")
+            jump = f"goto [{codeIndex + 1 + sBx}]"
             return f"if R{A} {op} {value} then {jump}"
 
         def __LOADKX_handler(_):
