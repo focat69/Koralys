@@ -600,11 +600,17 @@ def read_proto(
                     curr_aux
                 )
             ),
-            "FASTCALL": lambda _: f"R{A} = builtin[{C}]",
-            "FASTCALL1": lambda _: f"R{A} = builtin[{C}](R{B})",
-            "FASTCALL2": lambda _: f"R{A} = builtin[{C}](R{B}, R{aux})",
-            "FASTCALL2K": lambda _: f"R{A} = builtin[{C}](R{B}, K{aux})",
-            "FASTCALL3": lambda _: f"R{A} = builtin[{C}]",
+            # FASTCALL: A = builtin function ID, C = skip offset to jump past the following CALL
+            # These are hint instructions. The results will come from the paired CALL instead of the FASTCALL itself
+            "FASTCALL": lambda _: f"fastcall builtin[{A}]; skip +{C}",
+            "FASTCALL1": lambda _: f"fastcall builtin[{A}](R{B}); skip +{C}",
+            "FASTCALL2": lambda _, curr_aux=aux: f"fastcall builtin[{A}](R{B}, R{curr_aux}); skip +{C}",
+            "FASTCALL2K": lambda _, curr_aux=aux: f"fastcall builtin[{A}](R{B}, K{curr_aux}); skip +{C}",
+            "FASTCALL3": lambda _, curr_aux=aux: (
+                f"fastcall builtin[{A}](R{B}, R{curr_aux & 0xFF}, R{(curr_aux >> 8) & 0xFF}); skip +{C}"
+                if curr_aux is not None
+                else f"fastcall builtin[{A}](R{B}); skip +{C}"
+            ),
             "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
             "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True),
