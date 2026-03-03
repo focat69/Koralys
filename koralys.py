@@ -26,7 +26,6 @@ The `DEBUG` flag is meant for development purposes only. Turn off before using i
 Issues:
     Decompile is broken/really bad/unfinished
     No type checking
-    Does not handle variables kindly
 
 Please contribute and fix these bugs and more that you may find.
 """
@@ -109,8 +108,8 @@ def create_empty_proto() -> Dict[str, Any]:
         "pTable": [],
         "smallLineInfo": [],
         "largeLineInfo": [],
+        "debugInfo": None,
     }
-
 
 def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[str]):
     proto["maxStackSize"] = reader.nextByte()
@@ -122,10 +121,10 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
     typesize = reader.nextVarInt()
     type_info = [reader.nextByte() for _ in range(typesize)]
     proto["typeInfo"] = type_info
-
+ 
     proto["sizeCode"] = reader.nextVarInt()
     proto["codeTable"].extend(reader.nextInt() for _ in range(proto["sizeCode"]))
-
+ 
     proto["sizeConsts"] = reader.nextVarInt()
     proto["kTable"] = [
         read_constant(reader, string_table) for _ in range(proto["sizeConsts"])
@@ -133,18 +132,42 @@ def read_proto_data(reader: Reader, proto: Dict[str, Any], string_table: List[st
     debug(f"v5: kTable for proto has {len(proto['kTable'])} constants:")
     for idx, const in enumerate(proto["kTable"]):
         debug(f"  [{idx}] type={const.get('type', '?')}, value={const.get('value', 'MISSING')}")
-
+ 
     proto["sizeProtos"] = reader.nextVarInt()
     proto["pTable"] = [reader.nextVarInt() for _ in range(proto["sizeProtos"])]
-
+ 
     proto["lineDefined"] = reader.nextVarInt()
     proto["source"] = read_proto_source(reader, string_table)
-
+ 
     if reader.nextByte() == 1:  # has line info?
         read_line_info(reader, proto)
-
+ 
     if reader.nextByte() == 1:  # has debug info?
-        raise ValueError("only ROBLOX scripts can be disassembled")
+        proto["debugInfo"] = read_debug_info(reader, string_table)
+        
+def read_debug_info(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
+    """Parse debug info (local variable names + upvalue names) from bytecode
+    The format is the same for v5 and v6: varInfo entries then upvalue name entries"""
+    debug_info = {
+        "varInfo": [],
+        "upvalueInfo": [],
+    }
+    sizeVars = reader.nextVarInt()
+    for _ in range(sizeVars):
+        name_idx = reader.nextVarInt()
+        name = string_table[name_idx - 1] if 0 < name_idx <= len(string_table) else f"<var_{name_idx}>"
+        debug_info["varInfo"].append({
+            "name": name,
+            "startpc": reader.nextVarInt(),
+            "endpc": reader.nextVarInt(),
+            "reg": reader.nextByte(),
+        })
+    sizeUpvalues = reader.nextVarInt()
+    for _ in range(sizeUpvalues):
+        uv_idx = reader.nextVarInt()
+        uv_name = string_table[uv_idx - 1] if 0 < uv_idx <= len(string_table) else f"<uv_{uv_idx}>"
+        debug_info["upvalueInfo"].append(uv_name)
+    return debug_info
 
 
 def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
@@ -377,21 +400,48 @@ def read_proto(
     OP_TABLE = get_op_table(luau_version)
     output = ""
     tab_space = "    " * (depth - 1)
-
-    output += f"{tab_space}function({', '.join(['...' if proto['isVarArg'] else ''] + [f'R{i}' for i in range(proto['numParams'])])})\n"
-
+ 
+    # Build debug info helpers if available
+    debug_info = proto.get("debugInfo")
+    # reg_name: look up variable name for a register at a given pc
+    def reg_name(reg: int, pc: int) -> str:
+        """Return 'varname' if debug info maps register `reg` at instruction `pc`, else None.
+        Also matches at startpc - 1 to annotate the defining instruction itself,
+        since the compiler sets startpc to the instruction AFTER the assignment."""
+        if debug_info is None:
+            return None
+        for var in debug_info["varInfo"]:
+            if var["reg"] == reg and (var["startpc"] - 1) <= pc < var["endpc"]:
+                return var["name"]
+        return None
+ 
+    def upvalue_name(idx: int) -> str:
+        """Return upvalue name from debug info, or None."""
+        if debug_info and idx < len(debug_info["upvalueInfo"]):
+            return debug_info["upvalueInfo"][idx]
+        return None
+ 
+    # Build function signature with parameter names from debug info
+    params = []
+    if proto["isVarArg"]:
+        params.append("...")
+    for i in range(proto["numParams"]):
+        name = reg_name(i, 0)
+        params.append(name if name else f"R{i}")
+    output += f"{tab_space}function({', '.join(params)})\n"
+ 
     # opnameToOpcode = {info.name: info["number"] for info in OP_TABLE}
     opcodeToOpname = {
         info.number: info.name for info in OP_TABLE
     }
     max_opname_length = max(len(info.name) for info in OP_TABLE)
-
+ 
     # def get_opcode_from_name(opname: str) -> int:
     #     opcode = opnameToOpcode.get(opname)
     #     if opcode is None:
     #         raise ValueError(f"Unknown opname {opname}")
     #     return opcode
-
+ 
     codeIndex = 0
     while codeIndex < len(proto["codeTable"]):
         i = proto["codeTable"][codeIndex]
@@ -402,17 +452,17 @@ def read_proto(
         C = get_arg_c(i)
         sBx = get_arg_sBx(i)
         sAx = get_arg_sAx(i)
-
+ 
         op_name = opcodeToOpname.get(opc, "UNKNOWN")
         output += f"{'    ' * depth}[{codeIndex:03}] {op_name:<{max_opname_length}} "
-
+ 
         aux = None
         if any(
             info.name == op_name and info.get("aux", False) for info in OP_TABLE
         ) and codeIndex + 1 < len(proto["codeTable"]):
             aux = proto["codeTable"][codeIndex + 1]
             codeIndex += 1
-
+ 
         def __CALL_handler(_):
             # B = nargs + 1 (0 = varargs to top), C = nresults + 1 (0 = multi-return)
             if B == 0:
@@ -437,14 +487,14 @@ def read_proto(
                 return f"{returns} = R{A}({args})"
             else:
                 return f"R{A}({args})"
-
+ 
         def __CAPTURE_handler(_):
             capture_types = ["VAL", "REF", "UPVAL"]
             capture_type = (
                 capture_types[A] if A < len(capture_types) else f"Unknown({A})"
             )
             return f"capture {capture_type} R{B}"
-
+ 
         def __GETIMPORT_handler(_):
             # https://github.com/luau-lang/luau/blob/0.631/Compiler/src/BytecodeBuilder.cpp#L913-L920
             # 100% not just ported to python
@@ -453,13 +503,13 @@ def read_proto(
                 id1 = (ids >> 20) & 1023 if count > 0 else None
                 id2 = (ids >> 10) & 1023 if count > 1 else None
                 id3 = ids & 1023 if count > 2 else None
-
+ 
                 return count, [x for x in [id1, id2, id3] if x is not None]
-
+ 
             def import_id_to_name(ids: int) -> str:
                 imported_path = ""
                 _, ids = decompose_import_id(ids)
-
+ 
                 for i, id_constant in enumerate(ids):
                     id_constant = proto["kTable"][id_constant]
                     assert (
@@ -472,29 +522,29 @@ def read_proto(
                     # also slow but I don't care lol
                     # this is Python, what do you expect?
                     imported_path += to_append
-
+ 
                 return imported_path
-
+ 
             import_id = proto["kTable"][Bx]["value"]
             imported_path = import_id_to_name(import_id)
             return f"R{A} = {imported_path} -- Import ID: {import_id}"
-
+ 
         def jump_if_gen(
             op: str | None = None, invert: bool = False, k_mode: bool = False
         ):
             """Generates a conditional jump statement based on the provided operation.
-
-            This function constructs a string representing a conditional jump in a specific format,
-            allowing for optional inversion of the condition and handling of auxiliary values.
-            The generated statement can be used in bytecode or intermediate representations.
-
+ 
+            For JUMPIFNOT{EQ,LE,LT}, invert=True flips the operator (== → ~=, <= → >, < → >=)
+            instead of prepending "not", which would be ambiguous (e.g. "if not R0 == R1"
+            reads as "(not R0) == R1" in Lua operator precedence).
+ 
             Args:
                 op (str | None): The operator to include in the condition, or None for no operator.
                 invert (bool): If True, inverts the condition in the generated statement.
                 k_mode (bool): If True, appends `K` before the index,
                                use this with operations like `JUMPIFEQK`,
                                usually where the operation ends in `K`.
-
+ 
             Returns:
                 str: A formatted string representing the conditional jump statement.
             """
@@ -512,18 +562,18 @@ def read_proto(
                 operator = (inv_op_map if invert else op_map).get(op, op)
                 rhs = f"K{current_aux}" if k_mode else f"R{current_aux}"
                 return f"if R{current_A} {operator} {rhs} then {jump}"
-
+ 
         def jumpx_if_gen(value: str, curr_aux=None):
-            # aux bit 31 is the NOT flag for JUMPXEQK* instructions :sob:
+            # aux bit 31 is the NOT flag for JUMPXEQK* instructions
             not_flag = (curr_aux >> 31) & 1 if curr_aux is not None else 0
             op = "~=" if not_flag else "=="
             jump = f"goto [{codeIndex + 1 + sBx}]"
             return f"if R{A} {op} {value} then {jump}"
-
+ 
         def __LOADKX_handler(_):
             k = proto["kTable"][aux] if aux < len(proto["kTable"]) else {"type": "nil", "value": "nil"}
             return f"R{A} = {repr(k['value']) if isinstance(k['value'], str) else k['value']}"
-
+ 
         opcode_handlers = {
             "NOP": lambda _: "-- do nothing (no-op / NOP)",
             "BREAK": lambda _: "break",
@@ -576,6 +626,7 @@ def read_proto(
                 else f"R{curr_A} = R{curr_B}[Invalid constant index]; R{curr_A+1} = R{curr_B}"
             ),
             "CALL": __CALL_handler,
+            # B = nresults + 1 (0 = multi-return to top)
             "RETURN": lambda _: (
                 f"return R{A} ..." if B == 0
                 else "return" if B == 1
@@ -621,8 +672,8 @@ def read_proto(
             "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
             "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True),
-            "FORNPREP": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
-            "FORNLOOP": lambda _: f"... goto [{codeIndex + 1 + sBx}]; ...",
+            "FORNPREP": lambda _: f"R{A} -= R{A+2}; goto [{codeIndex + 1 + sBx}]",
+            "FORNLOOP": lambda _: f"R{A} += R{A+2}; if R{A} <= R{A+1} then goto [{codeIndex + 1 + sBx}]; R{A+3} = R{A}",
             "MINUS": lambda _: f"R{A} = -R{B}",
             "LENGTH": lambda _: f"R{A} = #R{B}",
             # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2134-L2136
@@ -637,17 +688,16 @@ def read_proto(
             ),
             "CONCAT": lambda _: f"R{A} = R{B} .. R{C}",
             "NOT": lambda _: f"R{A} = not R{B}",
-            "FORGPREP": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
+            "FORGPREP": lambda _: f"R{A} = R{A+1}; R{A+1} = R{A+2}; R{A+2} = R{A+3}; R{A+3} = nil; goto [{codeIndex + 1 + sBx}]",
             "FORGLOOP": lambda _, curr_aux=aux: (
                 f"R{A+3}, ..., R{A+2+(curr_aux & 0x7F)} = R{A}(R{A+1}, R{A+2}); "
                 f"if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{codeIndex + 1 + sBx}]"
                 if curr_aux is not None
                 else f"R{A+3}, ... = R{A}(R{A+1}, R{A+2}); goto [{codeIndex + 1 + sBx}]"
             ),
-            "FORGPREP_INEXT": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
+            "FORGPREP_INEXT": lambda _: f"R{A} = next; goto [{codeIndex + 1 + sBx}]",
             "NATIVECALL": lambda _: "Unimplemented",
             # B encodes count+1; B=0 means "all remaining varargs"
-            # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2171-L2173
             "GETVARARGS": lambda _: (
                 f"R{A}, ... = ..."
                 if B == 0
@@ -655,13 +705,13 @@ def read_proto(
             ),
             "DUPCLOSURE": lambda _: f"R{A} = K{Bx} -- duplicate",
             "LOADKX": __LOADKX_handler,
-            "FORGPREP_NEXT": lambda _: f"... goto [{codeIndex + 1 + sBx}]",
+            "FORGPREP_NEXT": lambda _: f"R{A} = next; goto [{codeIndex + 1 + sBx}]",
         }
-
+ 
         for condition in ["EQ", "LE", "LT", None]:
             opcode_handlers[f"JUMPIF{condition or ''}"] = lambda _, cond=condition: jump_if_gen(cond)
             opcode_handlers[f"JUMPIFNOT{condition or ''}"] = lambda _, cond=condition: jump_if_gen(cond, True)
-
+ 
         for gen_op_name in ["AND", "OR"]:
             def __gen_op_handler(gen_op_name: str):
                 op = "and" if gen_op_name.startswith("AND") else "or"
@@ -677,7 +727,7 @@ def read_proto(
                     return f"R{A} = R{B} {op} R{C}"
             opcode_handlers[gen_op_name] = __gen_op_handler
             opcode_handlers[f"{gen_op_name}K"] = __gen_op_handler
-
+ 
         math_ops = {
             "ADD": "+",
             "SUB": "-",
@@ -687,16 +737,25 @@ def read_proto(
             "MOD": "%",
             "POW": "^",
         }
-
+ 
         for gen_op_name in ["SUBRK", "DIVRK"]:
-            opcode_handlers[gen_op_name] = lambda op: f"R{A} = R{A} {math_ops[op[:-2]]} R{C}"
-
-
+            def __subrk_divrk_handler(op):
+                op_sym = math_ops[op[:-2]]
+                k = (
+                    proto["kTable"][B]
+                    if B < len(proto["kTable"])
+                    else {"type": "nil", "value": "nil"}
+                )
+                kval = repr(k['value']) if isinstance(k['value'], str) else k['value']
+                return f"R{A} = {kval} {op_sym} R{C}"
+            opcode_handlers[gen_op_name] = __subrk_divrk_handler
+ 
+ 
         for gen_op_name in ["ADD", "SUB", "MUL", "DIV", "IDIV", "MOD", "POW"]:
             opcode_handlers[gen_op_name] = (
                 lambda opcode: f"R{A} = R{B} {math_ops[opcode]} R{C}"
             )
-
+ 
             def __gen_op_handler(opcode):
                 op = math_ops[opcode[:-1]]
                 k = (
@@ -705,19 +764,29 @@ def read_proto(
                     else {"type": "nil", "value": "nil"}
                 )
                 return f"R{A} = R{B} {op} {repr(k['value']) if isinstance(k['value'], str) else k['value']}"
-
+ 
             opcode_handlers[f"{gen_op_name}K"] = __gen_op_handler
-
+ 
         if op_name in opcode_handlers:
-            output += opcode_handlers[op_name](op_name)
+            handler_result = opcode_handlers[op_name](op_name)
+            output += handler_result
         else:
-            output += f"Unknown opcode: {opc}"
-
+            handler_result = f"Unknown opcode: {opc}"
+            output += handler_result
+ 
+        # Annotate instruction with variable name for the destination register (A),
+        # but only if the instruction actually writes to register A (contains "R{A} =").
+        inst_pc = codeIndex if aux is None else codeIndex - 1
+        if f"R{A} =" in handler_result or f"R{A}," in handler_result:
+            dest_name = reg_name(A, inst_pc)
+            if dest_name:
+                output += f"  -- {dest_name}"
+ 
         output += "\n"
         codeIndex += 1
-
+ 
     output += "end\n"
-
+ 
     if len(proto["kTable"]) > 0:
         output += "--< Constants >--\n"
         constant_types = {
@@ -735,7 +804,7 @@ def read_proto(
                 k["type"], lambda k: f"Unknown constant type: {k['type']}"
             )(k)
             output += f"{'    ' * depth}[{i}] = {value}\n"
-
+ 
     if "sizeProtos" in proto and proto["sizeProtos"] > 0:
         output += "--< Protos >--\n"
         for i, proto_idx in enumerate(proto["pTable"]):
@@ -744,12 +813,21 @@ def read_proto(
                 output += f"{'    ' * depth}[{i}] = {read_proto(child_proto, depth + 1, proto_table, string_table, luau_version)}\n"
             else:
                 output += f"{'    ' * depth}[{i}] = <invalid proto index {proto_idx}>\n"
-
+ 
     if proto["numUpValues"] > 0:
         output += "--< Upvalues >--\n"
         for i in range(proto["numUpValues"]):
-            output += f"{'    ' * depth}[{i}] = Upvalue {i}\n"
-
+            uv_name = upvalue_name(i)
+            if uv_name:
+                output += f"{'    ' * depth}[{i}] = {uv_name}\n"
+            else:
+                output += f"{'    ' * depth}[{i}] = Upvalue {i}\n"
+ 
+    if debug_info and debug_info["varInfo"]:
+        output += "--< Local Variables >--\n"
+        for var in debug_info["varInfo"]:
+            output += f"{'    ' * depth}R{var['reg']} = '{var['name']}' (pc {var['startpc']}..{var['endpc']})\n"
+ 
     return output
 
 

@@ -34,7 +34,6 @@ The `DEBUG` flag is meant for development purposes only. Turn off before using i
 
 - Decompile is broken/really bad/unfinished
 - No type checking
-- Does not handle variables kindly
 
 Please contribute and fix these bugs and more that you may find
 
