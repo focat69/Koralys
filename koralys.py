@@ -576,11 +576,12 @@ def read_proto(
                 else f"R{curr_A} = R{curr_B}[Invalid constant index]; R{curr_A+1} = R{curr_B}"
             ),
             "CALL": __CALL_handler,
-            "RETURN": lambda _: f"return R{A} ..."
-            if B == 0
-            else "return"
-            if B == 1
-            else f"return R{A} ... R{A+B-2}",
+            "RETURN": lambda _: (
+                f"return R{A} ..." if B == 0
+                else "return" if B == 1
+                else f"return R{A}" if B == 2
+                else f"return R{A} ... R{A+B-2}"
+            ),
             "JUMP": lambda _: f"goto [{codeIndex + 1 + sBx}]",
             "JUMPBACK": lambda _: f"goto [{codeIndex + 1 + sBx}]",
             "JUMPX": lambda _: f"goto [{codeIndex + 1 + sAx}]",
