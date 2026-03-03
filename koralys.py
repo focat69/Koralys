@@ -499,13 +499,19 @@ def read_proto(
                 str: A formatted string representing the conditional jump statement.
             """
             op_map = {"EQ": "==", "LE": "<=", "LT": "<"}
+            inv_op_map = {"EQ": "~=", "LE": ">", "LT": ">="}
             current_A = A
             current_aux = aux
-            pre_op = " not " if invert else " "
             jump = opcode_handlers["JUMP"]("JUMP")
-            operator = op_map.get(op, op) if op else ""
-            after_cond = operator and f" {operator} {k_mode and f'K{current_aux}' or f'R{current_aux}'} " or " "
-            return f"if{pre_op}R{current_A}{after_cond}then {jump}"
+ 
+            if op is None:
+                pre_op = " not " if invert else " "
+                return f"if{pre_op}R{current_A} then {jump}"
+            else:
+                # JUMPIFEQ / JUMPIFNOTEQ etc. comparison with second operand
+                operator = (inv_op_map if invert else op_map).get(op, op)
+                rhs = f"K{current_aux}" if k_mode else f"R{current_aux}"
+                return f"if R{current_A} {operator} {rhs} then {jump}"
 
         def jumpx_if_gen(value: str, curr_aux=None):
             # aux bit 31 is the NOT flag for JUMPXEQK* instructions :sob:
