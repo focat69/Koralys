@@ -693,14 +693,14 @@ def read_proto(
             ),
             "CONCAT": lambda _: f"R{A} = R{B} .. R{C}",
             "NOT": lambda _: f"R{A} = not R{B}",
-            "FORGPREP": lambda _: f"R{A} = R{A+1}; R{A+1} = R{A+2}; R{A+2} = R{A+3}; R{A+3} = nil; goto [{codeIndex + 1 + sBx}]",
+            "FORGPREP": lambda _: f"prepare for-in R{A}..R{A+2}; goto [{codeIndex + 1 + sBx}]",
             "FORGLOOP": lambda _, curr_aux=aux: (
                 f"R{A+3}, ..., R{A+2+(curr_aux & 0x7F)} = R{A}(R{A+1}, R{A+2}); "
                 f"if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{codeIndex + 1 + sBx}]"
                 if curr_aux is not None
                 else f"R{A+3}, ... = R{A}(R{A+1}, R{A+2}); goto [{codeIndex + 1 + sBx}]"
             ),
-            "FORGPREP_INEXT": lambda _: f"R{A} = next; goto [{codeIndex + 1 + sBx}]",
+            "FORGPREP_INEXT": lambda _: f"prepare for-in (ipairs) R{A}..R{A+2}; goto [{codeIndex + 1 + sBx}]",
             "NATIVECALL": lambda _: "Unimplemented",
             # B encodes count+1; B=0 means "all remaining varargs"
             "GETVARARGS": lambda _: (
@@ -710,7 +710,7 @@ def read_proto(
             ),
             "DUPCLOSURE": lambda _: f"R{A} = K{Bx} -- duplicate",
             "LOADKX": __LOADKX_handler,
-            "FORGPREP_NEXT": lambda _: f"R{A} = next; goto [{codeIndex + 1 + sBx}]",
+            "FORGPREP_NEXT": lambda _: f"prepare for-in (pairs) R{A}..R{A+2}; goto [{codeIndex + 1 + sBx}]",
         }
  
         for condition in ["EQ", "LE", "LT", None]:
