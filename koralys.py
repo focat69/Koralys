@@ -206,11 +206,16 @@ def read_constant(reader: Reader, string_table: List[str]) -> Dict[str, Any]:
 
 
 def read_proto_source(reader: Reader, string_table: List[str]) -> str:
+    """Read the proto's debugname (1-based string table index, 0 = no name)"""
     protoSourceId = reader.nextVarInt()
+    # protoSourceId is 1-based (0 means no debug name); subtract 1 to get 0-based index
+    index = protoSourceId - 1
+    if index < 0:
+        return ""  # no debug name (top-level chunk or anonymous function)
     return (
-        string_table[protoSourceId]
-        if protoSourceId < len(string_table)
-        else "Invalid source index"
+        string_table[index]
+        if index < len(string_table)
+        else f"Invalid source index: {protoSourceId}"
     )
 
 
