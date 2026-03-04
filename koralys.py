@@ -460,6 +460,7 @@ def read_proto(
  
         op_name = opcodeToOpname.get(opc, "UNKNOWN")
         output += f"{'    ' * depth}[{codeIndex:03}] {op_name:<{max_opname_length}} "
+        inst_index = codeIndex
  
         aux = None
         if any(
@@ -569,10 +570,9 @@ def read_proto(
                 return f"if R{current_A} {operator} {rhs} then {jump}"
  
         def jumpx_if_gen(value: str, curr_aux=None):
-            # aux bit 31 is the NOT flag for JUMPXEQK* instructions
             not_flag = (curr_aux >> 31) & 1 if curr_aux is not None else 0
             op = "~=" if not_flag else "=="
-            jump = f"goto [{codeIndex + 1 + sBx}]"
+            jump = f"goto [{inst_index + 1 + sBx}]"
             return f"if R{A} {op} {value} then {jump}"
  
         def __LOADKX_handler(_):
@@ -585,7 +585,7 @@ def read_proto(
             "PREPVARARGS": lambda _: f"(adjust vararg params, {A} fixed params)",
             "LOADNIL": lambda _: f"R{A} = nil",
             "LOADB": lambda _: (
-                f"R{A} = {bool(B)}; goto [{codeIndex + C + 1}]"
+                f"R{A} = {bool(B)}; goto [{inst_index + C + 1}]"
                 if C != 0
                 else f"R{A} = {bool(B)}"
             ),
@@ -638,9 +638,9 @@ def read_proto(
                 else f"return R{A}" if B == 2
                 else f"return R{A} ... R{A+B-2}"
             ),
-            "JUMP": lambda _: f"goto [{codeIndex + 1 + sBx}]",
-            "JUMPBACK": lambda _: f"goto [{codeIndex + 1 + sBx}]",
-            "JUMPX": lambda _: f"goto [{codeIndex + 1 + sAx}]",
+            "JUMP": lambda _: f"goto [{inst_index + 1 + sBx}]",
+            "JUMPBACK": lambda _: f"goto [{inst_index + 1 + sBx}]",
+            "JUMPX": lambda _: f"goto [{inst_index + 1 + sAx}]",
             "JUMPXEQKNIL": lambda _, curr_aux=aux: jumpx_if_gen("nil", curr_aux),
             "JUMPXEQKB": lambda _, curr_aux=aux: jumpx_if_gen(
                 str(bool(curr_aux & 1)).lower() if curr_aux is not None else "?",
@@ -677,8 +677,8 @@ def read_proto(
             "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
             "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True),
-            "FORNPREP": lambda _: f"R{A} -= R{A+2}; goto [{codeIndex + 1 + sBx}]",
-            "FORNLOOP": lambda _: f"R{A} += R{A+2}; if R{A} <= R{A+1} then goto [{codeIndex + 1 + sBx}]; R{A+3} = R{A}",
+            "FORNPREP": lambda _: f"R{A} -= R{A+2}; goto [{inst_index + 1 + sBx}]",
+            "FORNLOOP": lambda _: f"R{A} += R{A+2}; if R{A} <= R{A+1} then goto [{inst_index + 1 + sBx}]; R{A+3} = R{A}",
             "MINUS": lambda _: f"R{A} = -R{B}",
             "LENGTH": lambda _: f"R{A} = #R{B}",
             # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2134-L2136
@@ -693,14 +693,14 @@ def read_proto(
             ),
             "CONCAT": lambda _: f"R{A} = R{B} .. R{C}",
             "NOT": lambda _: f"R{A} = not R{B}",
-            "FORGPREP": lambda _: f"prepare for-in R{A}..R{A+2}; goto [{codeIndex + 1 + sBx}]",
+            "FORGPREP": lambda _: f"prepare for-in R{A}..R{A+2}; goto [{inst_index + 1 + sBx}]",
             "FORGLOOP": lambda _, curr_aux=aux: (
                 f"R{A+3}, ..., R{A+2+(curr_aux & 0x7F)} = R{A}(R{A+1}, R{A+2}); "
-                f"if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{codeIndex + 1 + sBx}]"
+                f"if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{inst_index + 1 + sBx}]"
                 if curr_aux is not None
-                else f"R{A+3}, ... = R{A}(R{A+1}, R{A+2}); goto [{codeIndex + 1 + sBx}]"
+                else f"R{A+3}, ... = R{A}(R{A+1}, R{A+2}); goto [{inst_index + 1 + sBx}]"
             ),
-            "FORGPREP_INEXT": lambda _: f"prepare for-in (ipairs) R{A}..R{A+2}; goto [{codeIndex + 1 + sBx}]",
+            "FORGPREP_INEXT": lambda _: f"prepare for-in (ipairs) R{A}..R{A+2}; goto [{inst_index + 1 + sBx}]",
             "NATIVECALL": lambda _: "Unimplemented",
             # B encodes count+1; B=0 means "all remaining varargs"
             "GETVARARGS": lambda _: (
@@ -710,7 +710,7 @@ def read_proto(
             ),
             "DUPCLOSURE": lambda _: f"R{A} = K{Bx} -- duplicate",
             "LOADKX": __LOADKX_handler,
-            "FORGPREP_NEXT": lambda _: f"prepare for-in (pairs) R{A}..R{A+2}; goto [{codeIndex + 1 + sBx}]",
+            "FORGPREP_NEXT": lambda _: f"prepare for-in (pairs) R{A}..R{A+2}; goto [{inst_index + 1 + sBx}]",
         }
  
         for condition in ["EQ", "LE", "LT", None]:
@@ -781,7 +781,7 @@ def read_proto(
  
         # Annotate instruction with variable name for the destination register (A),
         # but only if the instruction actually writes to register A (contains "R{A} =").
-        inst_pc = codeIndex if aux is None else codeIndex - 1
+        inst_pc = inst_index
         if f"R{A} =" in handler_result or f"R{A}," in handler_result:
             dest_name = reg_name(A, inst_pc)
             if dest_name:
