@@ -136,6 +136,7 @@ def read_proto_source(reader: Reader, string_table: List[str]) -> str:
 
 def read_line_info(reader: Reader, proto: Dict[str, Any]):
     compKey = reader.nextByte()
+    proto["lineGapLog2"] = compKey
     proto["smallLineInfo"] = [reader.nextByte() for _ in range(proto["sizeCode"])]
     intervals = ((proto["sizeCode"] - 1) >> compKey) + 1
     proto["largeLineInfo"] = [reader.nextInt() for _ in range(intervals)]

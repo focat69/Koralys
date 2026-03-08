@@ -56,6 +56,27 @@ def read_proto(
             return debug_info["upvalueInfo"][idx]
         return None
  
+    # smallLineInfo = per-instruction signed byte deltas of offset-from-interval
+    # largeLineInfo = absolute line numbers at intervals of (1 << lineGapLog2)
+    # Formula: accumulate the signed deltas, then line = largeLineInfo[pc >> gap] + accumulated_offset
+    line_map = None
+    if proto.get("smallLineInfo") and proto.get("largeLineInfo"):
+        gap = proto.get("lineGapLog2", 0)
+        small = proto["smallLineInfo"]
+        large = proto["largeLineInfo"]
+        line_map = []
+        last_offset = 0
+        for pc in range(len(small)):
+            delta = small[pc]
+            if delta >= 128:
+                delta -= 256
+            last_offset += delta
+            interval_idx = pc >> gap
+            if interval_idx < len(large):
+                line_map.append(large[interval_idx] + last_offset)
+            else:
+                line_map.append(0)
+                
     # Build function signature with parameter names from debug info
     params = []
     if proto["isVarArg"]:
@@ -445,11 +466,16 @@ def read_proto(
  
         # Annotate instruction with variable name for the destination register (A),
         # but only if the instruction actually writes to register A (contains "R{A} =").
+        annotations = []
         inst_pc = inst_index
         if f"R{A} =" in handler_result or f"R{A}," in handler_result:
             dest_name = reg_name(A, inst_pc)
             if dest_name:
-                output += f"  -- {dest_name}"
+                annotations.append(dest_name)
+        if line_map and inst_pc < len(line_map) and line_map[inst_pc] > 0:
+            annotations.append(f"line {line_map[inst_pc]}")
+        if annotations:
+            output += f"  -- {', '.join(annotations)}"
  
         output += "\n"
         codeIndex += 1
