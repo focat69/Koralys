@@ -1,3 +1,4 @@
+import re
 from typing import List, Dict, Any, Tuple
 
 from koralys.constants import (
@@ -459,19 +460,25 @@ def read_proto(
  
         if op_name in opcode_handlers:
             handler_result = opcode_handlers[op_name](op_name)
-            output += handler_result
         else:
             handler_result = f"Unknown opcode: {opc}"
-            output += handler_result
  
-        # Annotate instruction with variable name for the destination register (A),
-        # but only if the instruction actually writes to register A (contains "R{A} =").
-        annotations = []
+        # Inline variable names: replace `R{n}` with actual variable name where available
+        # and skip CALL/FORGLOOP where the same register is both input (function/iterator)
+        # and output (result), making naive substitution misleading
         inst_pc = inst_index
-        if f"R{A} =" in handler_result or f"R{A}," in handler_result:
-            dest_name = reg_name(A, inst_pc)
-            if dest_name:
-                annotations.append(dest_name)
+        _no_inline_ops = {"CALL", "FORGLOOP"}
+        if debug_info and op_name not in _no_inline_ops:
+            def _replace_reg(m, _pc=inst_pc):
+                reg_num = int(m.group(1))
+                name = reg_name(reg_num, _pc)
+                return name if name else m.group(0)
+            handler_result = re.sub(r'\bR(\d+)\b', _replace_reg, handler_result)
+ 
+        output += handler_result
+ 
+        # here we annotate instruction with the source line number
+        annotations = []
         if line_map and inst_pc < len(line_map) and line_map[inst_pc] > 0:
             annotations.append(f"line {line_map[inst_pc]}")
         if annotations:
