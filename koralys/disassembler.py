@@ -9,6 +9,7 @@ from koralys.constants import (
     LBC_CONSTANT_TABLE,
     LBC_CONSTANT_CLOSURE,
     LBC_CONSTANT_VECTOR,
+    builtin_name,
 )
 from koralys.luau import (
     get_opcode,
@@ -294,14 +295,14 @@ def read_proto(
             ),
             # FASTCALL: A = builtin function ID, C = skip offset to jump past the following CALL
             # These are hint instructions. The results will come from the paired CALL instead of the FASTCALL itself
-            "FASTCALL": lambda _: f"fastcall builtin[{A}]; skip +{C}",
-            "FASTCALL1": lambda _: f"fastcall builtin[{A}](R{B}); skip +{C}",
-            "FASTCALL2": lambda _, curr_aux=aux: f"fastcall builtin[{A}](R{B}, R{curr_aux}); skip +{C}",
-            "FASTCALL2K": lambda _, curr_aux=aux: f"fastcall builtin[{A}](R{B}, K{curr_aux}); skip +{C}",
+            "FASTCALL": lambda _: f"fastcall {builtin_name(A)}; skip +{C}",
+            "FASTCALL1": lambda _: f"fastcall {builtin_name(A)}(R{B}); skip +{C}",
+            "FASTCALL2": lambda _, curr_aux=aux: f"fastcall {builtin_name(A)}(R{B}, R{curr_aux}); skip +{C}",
+            "FASTCALL2K": lambda _, curr_aux=aux: f"fastcall {builtin_name(A)}(R{B}, K{curr_aux}); skip +{C}",
             "FASTCALL3": lambda _, curr_aux=aux: (
-                f"fastcall builtin[{A}](R{B}, R{curr_aux & 0xFF}, R{(curr_aux >> 8) & 0xFF}); skip +{C}"
+                f"fastcall {builtin_name(A)}(R{B}, R{curr_aux & 0xFF}, R{(curr_aux >> 8) & 0xFF}); skip +{C}"
                 if curr_aux is not None
-                else f"fastcall builtin[{A}](R{B}); skip +{C}"
+                else f"fastcall {builtin_name(A)}(R{B}); skip +{C}"
             ),
             "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
