@@ -85,6 +85,24 @@ def read_proto(
     for i in range(proto["numParams"]):
         name = reg_name(i, 0)
         params.append(name if name else f"R{i}")
+    header_parts = []
+    source_name = proto.get("source", "")
+    if source_name:
+        header_parts.append(source_name)
+    header_parts.append(f"{proto.get('sizeCode', 0)} instructions")
+    header_parts.append(f"stack {proto.get('maxStackSize', 0)}")
+    header_parts.append(f"{proto['numUpValues']} upvalue{'s' if proto['numUpValues'] != 1 else ''}")
+    header_parts.append(f"{proto['numParams']} param{'s' if proto['numParams'] != 1 else ''}")
+    if proto["isVarArg"]:
+        header_parts.append("vararg")
+    if proto.get("lineDefined", 0) > 0:
+        if line_map:
+            min_line = min(l for l in line_map if l > 0) if any(l > 0 for l in line_map) else 0
+            max_line = max(line_map) if line_map else 0
+            header_parts.append(f"lines {min_line}-{max_line}")
+        else:
+            header_parts.append(f"line {proto.get('lineDefined', 0)}")
+    output += f"{tab_space}-- {' | '.join(header_parts)}\n"
     output += f"{tab_space}function({', '.join(params)})\n"
  
     # opnameToOpcode = {info.name: info["number"] for info in OP_TABLE}
@@ -308,9 +326,9 @@ def read_proto(
             "SETTABLEN": lambda _: f"R{B}[{C + 1}] = R{A}",
             "NEWCLOSURE": lambda _: f"R{A} = closure(proto[{Bx}])",
             "NAMECALL": lambda _, curr_aux=aux, curr_A=A, curr_B=B: (
-                f"R{curr_A} = R{curr_B}[{repr(proto['kTable'][curr_aux]['value'])}]; R{curr_A+1} = R{curr_B}"
+                f"R{curr_A} = R{curr_B}:{proto['kTable'][curr_aux]['value']}()"
                 if curr_aux is not None and curr_aux < len(proto['kTable'])
-                else f"R{curr_A} = R{curr_B}[Invalid constant index]; R{curr_A+1} = R{curr_B}"
+                else f"R{curr_A} = R{curr_B}:[Invalid constant index]()"
             ),
             "CALL": __CALL_handler,
             # B = nresults + 1 (0 = multi-return to top)
@@ -475,6 +493,14 @@ def read_proto(
                 return name if name else m.group(0)
             handler_result = re.sub(r'\bR(\d+)\b', _replace_reg, handler_result)
  
+        # Inline upvalue names: replace U{n} with actual upvalue name where available
+        if debug_info:
+            def _replace_upval(m):
+                uv_idx = int(m.group(1))
+                name = upvalue_name(uv_idx)
+                return name if name else m.group(0)
+            handler_result = re.sub(r'\bU(\d+)\b', _replace_upval, handler_result)
+
         output += handler_result
  
         # here we annotate instruction with the source line number
@@ -490,22 +516,40 @@ def read_proto(
     output += "end\n"
  
     if len(proto["kTable"]) > 0:
-        output += "--< Constants >--\n"
-        constant_types = {
-            LBC_CONSTANT_NIL: lambda k: "nil",
-            LBC_CONSTANT_BOOLEAN: lambda k: str(k["value"]).lower(),
-            LBC_CONSTANT_NUMBER: lambda k: k["value"],
-            LBC_CONSTANT_STRING: lambda k: repr(k["value"]),
-            LBC_CONSTANT_IMPORT: lambda k: k["value"],
-            LBC_CONSTANT_TABLE: lambda k: k["value"],
-            LBC_CONSTANT_CLOSURE: lambda k: k["value"],
-            LBC_CONSTANT_VECTOR: lambda k: k["value"],
-        }
+        output += f"--< Constants ({len(proto['kTable'])}) >--\n"
+        def _format_constant(k):
+            t = k["type"]
+            v = k["value"]
+            if t == LBC_CONSTANT_NIL:
+                return "nil"
+            elif t == LBC_CONSTANT_BOOLEAN:
+                return str(v).lower()
+            elif t == LBC_CONSTANT_NUMBER:
+                return f"{v}"
+            elif t == LBC_CONSTANT_STRING:
+                return repr(v)
+            elif t == LBC_CONSTANT_IMPORT:
+                return f"import({v})"
+            elif t == LBC_CONSTANT_TABLE:
+                key_names = []
+                for kid in v.get("ids", []):
+                    if kid < len(proto["kTable"]):
+                        kk = proto["kTable"][kid]
+                        if kk["type"] == LBC_CONSTANT_STRING:
+                            key_names.append(repr(kk["value"]))
+                        else:
+                            key_names.append(f"K{kid}")
+                    else:
+                        key_names.append(f"K{kid}")
+                return "{" + ", ".join(key_names) + "}"
+            elif t == LBC_CONSTANT_CLOSURE:
+                return f"proto[{v}]"
+            elif t == LBC_CONSTANT_VECTOR:
+                return f"vector({v[0]}, {v[1]}, {v[2]})"
+            else:
+                return f"<unknown type {t}>"
         for i, k in enumerate(proto["kTable"]):
-            value = constant_types.get(
-                k["type"], lambda k: f"Unknown constant type: {k['type']}"
-            )(k)
-            output += f"{'    ' * depth}[{i}] = {value}\n"
+            output += f"{'    ' * depth}[{i}] = {_format_constant(k)}\n"
  
     if "sizeProtos" in proto and proto["sizeProtos"] > 0:
         output += "--< Protos >--\n"
@@ -556,7 +600,7 @@ def disassemble(bytecode: bytes) -> Tuple[List[str], List[str], int, int, int]:
             continue  # skip child protos; they are shown inline by their parent
         output.extend(
             (
-                f"--< Proto->{i:03} | Line {proto.get('lineDefined', 0)} >--",
+                f"--< Proto->{i:03} >--",
                 read_proto(proto, 1, protoTable, stringTable, luau_version),
             )
         )
