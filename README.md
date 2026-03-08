@@ -12,6 +12,34 @@ This project is a result of countless hours of hard work and development. We ask
 
 If you'd like to compile your script, please refer to the `/compile` directory.
 
+## Usage
+
+```bash
+python main.py <bytecode_file>
+```
+
+## Project Structure
+
+```
+koralys/
+    __init__.py
+    constants.py
+    reader.py
+    luau/
+        __init__.py
+        opcodes.py
+        instruction.py
+    deserializer/
+        __init__.py
+        common.py
+        v5.py
+        v6.py
+    disassembler.py
+    decompiler.py
+main.py
+compile/
+```
+
 ## Written by:
 - **focat**
   - Discord: @focat (676960182621962271)
@@ -32,8 +60,7 @@ The `DEBUG` flag is meant for development purposes only. Turn off before using i
 
 ## Issues
 
-- Decompile is broken/really bad/unfinished
-- No type checking
+- Decompiler is unfinished
 
 Please contribute and fix these bugs and more that you may find
 

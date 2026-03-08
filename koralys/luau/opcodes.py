@@ -1,7 +1,3 @@
-"""
-Useful utility functions, and constants (e.g. the operation table, getting opcodes, other stuff) for Luau.
-"""
-
 class BytecodeOp:
     name: str
     type: str
@@ -25,10 +21,6 @@ class BytecodeOp:
             return getattr(self, key)
         except AttributeError:
             return default
-
-
-def get_op_table(bytecode_version: int) -> list[BytecodeOp]:
-    return OP_TABLE_VERSION_MAP[bytecode_version]
 
 
 OP_TABLE_V5 = [
@@ -130,43 +122,8 @@ index = next(
 )
 OP_TABLE_V6.pop(index)
 
-
 OP_TABLE_VERSION_MAP = {6: OP_TABLE_V6, 5: OP_TABLE_V5}
 
 
-def get_opcode(i: int) -> int:
-    return (i * 227) & 0xFF
-
-
-def get_arg_a(i: int) -> int:
-    return (i >> 8) & 0xFF
-
-
-def get_arg_b(i: int) -> int:
-    return (i >> 16) & 0xFF
-
-
-def get_arg_c(i: int) -> int:
-    return (i >> 24) & 0xFF
-
-
-# def GETARG_D(i: int) -> int:
-#     d = (i >> 16) & 0xFFFF  # Extract 16 bits for D
-#     return d - 0x10000 if d & 0x8000 else d  # Convert to signed
-
-
-def get_arg_Bx(i: int) -> int:
-    return i >> 16
-
-
-def get_arg_sBx(i: int) -> int:
-    # luau D field is a 16-bit signed value in bits 16-31 (two's complement).
-    # the old code used - 131071 which is a lua 5.x bias for an 18-bit field;
-    # luau's encoding uses a standard 16 bit signed int
-    d = (i >> 16) & 0xFFFF
-    return d - 0x10000 if d >= 0x8000 else d
-
-
-def get_arg_sAx(i: int) -> int:
-    e = (i >> 8) & 0xFFFFFF
-    return e - 0x1000000 if e >= 0x800000 else e
+def get_op_table(bytecode_version: int) -> list[BytecodeOp]:
+    return OP_TABLE_VERSION_MAP[bytecode_version]
