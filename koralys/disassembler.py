@@ -76,6 +76,34 @@ def read_proto(
     #     if opcode is None:
     #         raise ValueError(f"Unknown opname {opname}")
     #     return opcode
+    
+    # Pre-scan: here we collect all jump target instruction indices so we can emit the labels
+    jump_targets = set()
+    op_aux_set = {info.name for info in OP_TABLE if info.get("aux", False)}
+    _scan_idx = 0
+    while _scan_idx < len(proto["codeTable"]):
+        _inst = proto["codeTable"][_scan_idx]
+        _opc = get_opcode(_inst)
+        _name = opcodeToOpname.get(_opc, "")
+        _curr_idx = _scan_idx
+        if _name in op_aux_set and _scan_idx + 1 < len(proto["codeTable"]):
+            _scan_idx += 1
+        _sBx = get_arg_sBx(_inst)
+        _sAx = get_arg_sAx(_inst)
+        _C = get_arg_c(_inst)
+        if _name in ("JUMP", "JUMPBACK", "JUMPIF", "JUMPIFNOT",
+                     "JUMPIFEQ", "JUMPIFLE", "JUMPIFLT",
+                     "JUMPIFNOTEQ", "JUMPIFNOTLE", "JUMPIFNOTLT",
+                     "JUMPIFEQK", "FORNPREP", "FORNLOOP",
+                     "FORGPREP", "FORGPREP_INEXT", "FORGPREP_NEXT",
+                     "FORGLOOP", "JUMPXEQKNIL", "JUMPXEQKB",
+                     "JUMPXEQKN", "JUMPXEQKS"):
+            jump_targets.add(_curr_idx + 1 + _sBx)
+        elif _name == "JUMPX":
+            jump_targets.add(_curr_idx + 1 + _sAx)
+        elif _name == "LOADB" and _C != 0:
+            jump_targets.add(_curr_idx + _C + 1)
+        _scan_idx += 1
  
     codeIndex = 0
     while codeIndex < len(proto["codeTable"]):
@@ -89,6 +117,8 @@ def read_proto(
         sAx = get_arg_sAx(i)
  
         op_name = opcodeToOpname.get(opc, "UNKNOWN")
+        if codeIndex in jump_targets:
+            output += f"{'    ' * depth}.L{codeIndex}:\n"
         output += f"{'    ' * depth}[{codeIndex:03}] {op_name:<{max_opname_length}} "
         inst_index = codeIndex
  
@@ -202,7 +232,7 @@ def read_proto(
         def jumpx_if_gen(value: str, curr_aux=None):
             not_flag = (curr_aux >> 31) & 1 if curr_aux is not None else 0
             op = "~=" if not_flag else "=="
-            jump = f"goto [{inst_index + 1 + sBx}]"
+            jump = f"goto .L{inst_index + 1 + sBx}"
             return f"if R{A} {op} {value} then {jump}"
  
         def __LOADKX_handler(_):
@@ -215,7 +245,7 @@ def read_proto(
             "PREPVARARGS": lambda _: f"(adjust vararg params, {A} fixed params)",
             "LOADNIL": lambda _: f"R{A} = nil",
             "LOADB": lambda _: (
-                f"R{A} = {bool(B)}; goto [{inst_index + C + 1}]"
+                f"R{A} = {bool(B)}; goto .L{inst_index + C + 1}"
                 if C != 0
                 else f"R{A} = {bool(B)}"
             ),
@@ -268,9 +298,9 @@ def read_proto(
                 else f"return R{A}" if B == 2
                 else f"return R{A} ... R{A+B-2}"
             ),
-            "JUMP": lambda _: f"goto [{inst_index + 1 + sBx}]",
-            "JUMPBACK": lambda _: f"goto [{inst_index + 1 + sBx}]",
-            "JUMPX": lambda _: f"goto [{inst_index + 1 + sAx}]",
+            "JUMP": lambda _: f"goto .L{inst_index + 1 + sBx}",
+            "JUMPBACK": lambda _: f"goto .L{inst_index + 1 + sBx}",
+            "JUMPX": lambda _: f"goto .L{inst_index + 1 + sAx}",
             "JUMPXEQKNIL": lambda _, curr_aux=aux: jumpx_if_gen("nil", curr_aux),
             "JUMPXEQKB": lambda _, curr_aux=aux: jumpx_if_gen(
                 str(bool(curr_aux & 1)).lower() if curr_aux is not None else "?",
@@ -307,8 +337,8 @@ def read_proto(
             "COVERAGE": lambda _: "(coverage)",
             "CAPTURE": __CAPTURE_handler,
             "JUMPIFEQK": lambda _: jump_if_gen("==", k_mode=True),
-            "FORNPREP": lambda _: f"R{A} -= R{A+2}; goto [{inst_index + 1 + sBx}]",
-            "FORNLOOP": lambda _: f"R{A} += R{A+2}; if R{A} <= R{A+1} then goto [{inst_index + 1 + sBx}]; R{A+3} = R{A}",
+            "FORNPREP": lambda _: f"R{A} -= R{A+2}; goto .L{inst_index + 1 + sBx}",
+            "FORNLOOP": lambda _: f"R{A} += R{A+2}; if R{A} <= R{A+1} then goto .L{inst_index + 1 + sBx}; R{A+3} = R{A}",
             "MINUS": lambda _: f"R{A} = -R{B}",
             "LENGTH": lambda _: f"R{A} = #R{B}",
             # https://github.com/luau-lang/luau/blob/a251bc68a2b70212e53941fd541d16ce523a1e01/Compiler/src/BytecodeBuilder.cpp#L2134-L2136
@@ -323,14 +353,14 @@ def read_proto(
             ),
             "CONCAT": lambda _: f"R{A} = R{B} .. R{C}",
             "NOT": lambda _: f"R{A} = not R{B}",
-            "FORGPREP": lambda _: f"prepare for-in R{A}..R{A+2}; goto [{inst_index + 1 + sBx}]",
+            "FORGPREP": lambda _: f"prepare for-in R{A}..R{A+2}; goto .L{inst_index + 1 + sBx}",
             "FORGLOOP": lambda _, curr_aux=aux: (
                 f"R{A+3}, ..., R{A+2+(curr_aux & 0x7F)} = R{A}(R{A+1}, R{A+2}); "
-                f"if R{A+3} ~= nil then R{A+2} = R{A+3}; goto [{inst_index + 1 + sBx}]"
+                f"if R{A+3} ~= nil then R{A+2} = R{A+3}; goto .L{inst_index + 1 + sBx}"
                 if curr_aux is not None
-                else f"R{A+3}, ... = R{A}(R{A+1}, R{A+2}); goto [{inst_index + 1 + sBx}]"
+                else f"if R{A+3} ~= nil then R{A+2} = R{A+3}; goto .L{inst_index + 1 + sBx}"
             ),
-            "FORGPREP_INEXT": lambda _: f"prepare for-in (ipairs) R{A}..R{A+2}; goto [{inst_index + 1 + sBx}]",
+            "FORGPREP_INEXT": lambda _: f"prepare for-in (ipairs) R{A}..R{A+2}; goto .L{inst_index + 1 + sBx}",
             "NATIVECALL": lambda _: "Unimplemented",
             # B encodes count+1; B=0 means "all remaining varargs"
             "GETVARARGS": lambda _: (
@@ -344,7 +374,7 @@ def read_proto(
                 else f"R{A} = K{Bx} -- duplicate"
             ),
             "LOADKX": __LOADKX_handler,
-            "FORGPREP_NEXT": lambda _: f"prepare for-in (pairs) R{A}..R{A+2}; goto [{inst_index + 1 + sBx}]",
+            "FORGPREP_NEXT": lambda _: f"prepare for-in (pairs) R{A}..R{A+2}; goto .L{inst_index + 1 + sBx}",
         }
  
         for condition in ["EQ", "LE", "LT", None]:
