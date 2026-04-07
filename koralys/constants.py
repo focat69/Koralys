@@ -111,7 +111,7 @@ LBF_NAMES = {
     92: "math.isinf",
     93: "math.isfinite",
 }
- 
- 
+
+
 def builtin_name(id: int) -> str:
     return LBF_NAMES.get(id, f"builtin[{id}]")

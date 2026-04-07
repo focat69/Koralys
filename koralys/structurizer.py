@@ -185,10 +185,10 @@ def _classify_loop(
     Returns (LoopType, exit_block_id).
 
     Classification rules:
-    - FORNPREP at header or FORNLOOP at latch → for_numeric
-    - FORGLOOP at latch → for_generic
-    - Condition check at header (JUMPIF*, etc.) → while
-    - Condition check at latch (JUMPBACK with prior condition) → repeat_until
+    - FORNPREP at header or FORNLOOP at latch -> for_numeric
+    - FORGLOOP at latch -> for_generic
+    - Condition check at header (JUMPIF*, etc.) -> while
+    - Condition check at latch (JUMPBACK with prior condition) -> repeat_until
     """
     header_term = _get_terminator_name(cfg.get_block(header), proto, luau_version)
     latch_term = _get_terminator_name(cfg.get_block(latch), proto, luau_version)
@@ -214,10 +214,10 @@ def _classify_loop(
         return LoopType.FOR_NUMERIC, exit_block
 
     # Generic for: FORGLOOP can be the latch OR the header.
-    # Pattern A: FORGPREP → FORGLOOP (header), body falls through to FORGLOOP
-    #   back-edge: body → FORGLOOP, so header_term = FORGLOOP
-    # Pattern B: FORGPREP → body, FORGLOOP is latch that jumps back
-    #   back-edge: FORGLOOP → body_start, so latch_term = FORGLOOP
+    # Pattern A: FORGPREP -> FORGLOOP (header), body falls through to FORGLOOP
+    #   back-edge: body -> FORGLOOP, so header_term = FORGLOOP
+    # Pattern B: FORGPREP -> body, FORGLOOP is latch that jumps back
+    #   back-edge: FORGLOOP -> body_start, so latch_term = FORGLOOP
     if header_term == "FORGLOOP" or latch_term == "FORGLOOP":
         return LoopType.FOR_GENERIC, exit_block
 
@@ -231,7 +231,7 @@ def _classify_loop(
     # of the header block, not in a separate block.
     latch_block_obj = cfg.get_block(latch)
     if latch_term == "JUMPBACK" and latch_block_obj.start_pc == latch_block_obj.end_pc:
-        # Single-instruction JUMPBACK latch → repeat-until
+        # Single-instruction JUMPBACK latch -> repeat-until
         return LoopType.REPEAT_UNTIL, exit_block
 
     if latch_term in CONDITIONAL_JUMPS:
@@ -302,7 +302,7 @@ def identify_structures(
     """Identify all high-level control flow structures in a proto.
 
     Algorithm:
-    1. Find all back-edges → loops
+    1. Find all back-edges -> loops
     2. Compute loop bodies and classify loop types
     3. For non-loop conditional blocks, identify if/else structures
     4. Build block-to-loop mapping
@@ -365,6 +365,13 @@ def identify_structures(
         # Skip loop latches (FORNLOOP, FORGLOOP) — these are loop iteration checks
         is_latch = any(block.id == loop.latch for loop in loops)
         if is_latch:
+            continue
+
+        # Skip FORNPREP blocks — they're numeric for-loop setup blocks, not ifs.
+        # FORNPREP has 2 successors (body + exit), but it's the loop init, not
+        # a real conditional branch.
+        term_name = _get_terminator_name(block, proto, luau_version)
+        if term_name in ("FORNPREP", "FORGPREP", "FORGPREP_INEXT", "FORGPREP_NEXT"):
             continue
 
         true_branch = block.successors[0]   # fall-through
