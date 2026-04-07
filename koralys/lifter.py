@@ -493,7 +493,17 @@ class InstructionLifter:
 
         elif name == "SETLIST":
             # SETLIST A B C aux: R[A][aux..aux+C-2] = R[B]..R[B+C-2]
-            return []  # Handled by table constructor folding
+            table_var = self._var(A, pc)
+            stmts = []
+            if aux is not None and C > 0:
+                start_idx = aux
+                count = C - 1
+                for k in range(count):
+                    stmts.append(Assign(
+                        targets=[IndexExpr(table=VarRef(name=table_var.name, register=table_var.register, ssa_version=table_var.ssa_version), key=NumberLit(value=start_idx + k))],
+                        exprs=[self._var(B + k, pc)]
+                    ))
+            return stmts
 
         # --- Closures ---
         elif name == "NEWCLOSURE" or name == "DUPCLOSURE":
@@ -841,6 +851,79 @@ def fold_expressions(stmts: List[Stmt], preserve: Optional[Set[str]] = None) -> 
     return stmts
 
 
+def _is_table_assign(stmt: Stmt, table_name: str) -> Optional[tuple]:
+    """Check if stmt is an assignment to table_name[key] or table_name.field.
+
+    Returns (key_expr_or_None, value_expr) if it matches, None otherwise.
+    key_expr is None for sequential array entries.
+    """
+    if not isinstance(stmt, Assign):
+        return None
+    if len(stmt.targets) != 1 or len(stmt.exprs) != 1:
+        return None
+
+    target = stmt.targets[0]
+    value = stmt.exprs[0]
+
+    if isinstance(target, IndexExpr) and isinstance(target.table, VarRef):
+        if target.table.name == table_name:
+            return (target.key, value)
+
+    if isinstance(target, FieldExpr) and isinstance(target.table, VarRef):
+        if target.table.name == table_name:
+            return (StringLit(value=target.field), value)
+
+    return None
+
+
+def fold_table_constructors(stmts: List[Stmt]) -> List[Stmt]:
+    """Merge NEWTABLE/DUPTABLE + field assignments back into {} constructors.
+
+    Scans for `local t = {}` followed by `t[k] = v` or `t.field = v`
+    assignments and folds them into the table constructor literal.
+    Sequential numeric keys starting from 1 become array entries.
+    """
+    result: List[Stmt] = []
+    i = 0
+    while i < len(stmts):
+        stmt = stmts[i]
+
+        if (isinstance(stmt, LocalDecl)
+                and len(stmt.names) == 1
+                and len(stmt.exprs) == 1
+                and isinstance(stmt.exprs[0], TableConstructor)
+                and not stmt.exprs[0].entries):
+
+            table_name = stmt.names[0]
+            tbl = stmt.exprs[0]
+            entries: List[tuple] = []
+            next_array_idx = 1
+            j = i + 1
+
+            while j < len(stmts):
+                match = _is_table_assign(stmts[j], table_name)
+                if match is None:
+                    break
+                key_expr, val_expr = match
+
+                if isinstance(key_expr, NumberLit) and key_expr.value == next_array_idx:
+                    entries.append((None, val_expr))
+                    next_array_idx += 1
+                else:
+                    entries.append((key_expr, val_expr))
+                j += 1
+
+            if entries:
+                tbl.entries = entries
+            result.append(stmt)
+            i = j
+        else:
+            result.append(stmt)
+            i += 1
+
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Structure walker: emit structured Luau source
 # ---------------------------------------------------------------------------
@@ -914,13 +997,13 @@ class SourceEmitter:
     def emit(self) -> str:
         """Emit the complete decompiled source for this proto."""
         lines: List[str] = []
- 
+
         # Function header
         params = self.lifter.names.get_param_names()
         if self.proto["isVarArg"]:
             params.append("...")
         lines.append(f"function({', '.join(params)})")
- 
+
         # Emit body
         body_lines = self._emit_region(
             start_block=self.cfg.entry_id,
@@ -929,10 +1012,10 @@ class SourceEmitter:
             indent=1,
         )
         lines.extend(body_lines)
- 
+
         if lines and lines[-1].strip() == "return":
             lines.pop()
- 
+
         lines.append("end")
         return "\n".join(lines)
 
@@ -1028,6 +1111,7 @@ class SourceEmitter:
         """Emit all non-control-flow statements in a basic block."""
         stmts = self._collect_block_stmts(block.start_pc, block.end_pc)
         stmts = fold_expressions(stmts, self.lifter.names._debug_names)
+        stmts = fold_table_constructors(stmts)
         lines: List[str] = []
         for stmt in stmts:
             stmt_str = self._stmt_to_str(stmt, indent)
@@ -1358,6 +1442,7 @@ class SourceEmitter:
 
         stmts = self._collect_block_stmts(block.start_pc, end_pc)
         stmts = fold_expressions(stmts, self.lifter.names._debug_names)
+        stmts = fold_table_constructors(stmts)
         lines: List[str] = []
         for stmt in stmts:
             stmt_str = self._stmt_to_str(stmt, indent)
