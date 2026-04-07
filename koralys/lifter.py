@@ -914,13 +914,13 @@ class SourceEmitter:
     def emit(self) -> str:
         """Emit the complete decompiled source for this proto."""
         lines: List[str] = []
-
+ 
         # Function header
         params = self.lifter.names.get_param_names()
         if self.proto["isVarArg"]:
             params.append("...")
         lines.append(f"function({', '.join(params)})")
-
+ 
         # Emit body
         body_lines = self._emit_region(
             start_block=self.cfg.entry_id,
@@ -929,7 +929,10 @@ class SourceEmitter:
             indent=1,
         )
         lines.extend(body_lines)
-
+ 
+        if lines and lines[-1].strip() == "return":
+            lines.pop()
+ 
         lines.append("end")
         return "\n".join(lines)
 
