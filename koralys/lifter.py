@@ -1275,28 +1275,73 @@ class SourceEmitter:
             vname = self.lifter.names.get_name(r, 0, forgloop_pc)
             iter_vars.append(vname)
 
-        # Find the FORGPREP setup block to get the iterator expression
+        # Find the FORGPREP setup block and absorb the iterator expression
+        # into the for header instead of emitting it as separate statements.
         setup_bid = self._for_setup_blocks.get(loop.header)
+        iter_expr_str = None
+
         if setup_bid is not None:
             setup_block = self.cfg.get_block(setup_bid)
-            # Emit setup block body (non-terminator) — these are the
-            # instructions that set up the iterator (e.g., ipairs(t))
-            setup_stmts = self._emit_block_body_only(setup_block, indent)
-            lines.extend(setup_stmts)
+            setup_stmts = self._fold_block_body_stmts(setup_block)
             self._emitted.add(setup_bid)
 
-        # The iterator expression: R[A] holds the generator function after FORGPREP.
-        # We reference it from the setup block's PC for correct SSA version.
-        setup_pc = self.cfg.get_block(setup_bid).end_pc if setup_bid is not None else forgloop_pc
-        iter_name = self.lifter._var(forgloop_A, setup_pc).name
+            # The iterator triple lives in R[A], R[A+1], R[A+2].
+            # Get the variable name the lifter assigned to R[A].
+            setup_pc = setup_block.end_pc
+            gen_name = self.lifter._var(forgloop_A, setup_pc).name
+
+            # Try to find the LocalDecl that defines the generator.
+            # Case 1: multi-return call like `local gen, state, ctrl = pairs(t)`
+            # Case 2: individual assignments like `local gen = next; local state = t; ...`
+            absorbed = set()
+            for si, s in enumerate(setup_stmts):
+                if not isinstance(s, LocalDecl):
+                    continue
+                if gen_name in s.names:
+                    if s.exprs and isinstance(s.exprs[0], FunctionCallExpr):
+                        # Multi-return call (pairs, ipairs, etc.)
+                        iter_expr_str = self._expr_to_str(s.exprs[0])
+                        absorbed.add(si)
+                    break
+
+            if iter_expr_str is None:
+                # Individual assignments: collect exprs for R[A], R[A+1], R[A+2]
+                state_name = self.lifter._var(forgloop_A + 1, setup_pc).name
+                ctrl_name = self.lifter._var(forgloop_A + 2, setup_pc).name
+                triple_names = {gen_name, state_name, ctrl_name}
+                iter_exprs = []
+                for si, s in enumerate(setup_stmts):
+                    if isinstance(s, LocalDecl) and len(s.names) == 1 and s.names[0] in triple_names:
+                        if s.exprs:
+                            iter_exprs.append(s.exprs[0])
+                        absorbed.add(si)
+
+                # Drop trailing nil literals
+                while iter_exprs and isinstance(iter_exprs[-1], NilLit):
+                    iter_exprs.pop()
+
+                if iter_exprs:
+                    iter_expr_str = ", ".join(self._expr_to_str(e) for e in iter_exprs)
+
+            # Emit any remaining setup statements that weren't absorbed
+            for si, s in enumerate(setup_stmts):
+                if si not in absorbed:
+                    stmt_str = self._stmt_to_str(s, indent)
+                    if stmt_str:
+                        lines.append(stmt_str)
+
+        # Fallback: just use the generator variable name directly
+        if iter_expr_str is None:
+            setup_pc = self.cfg.get_block(setup_bid).end_pc if setup_bid is not None else forgloop_pc
+            iter_expr_str = self.lifter._var(forgloop_A, setup_pc).name
 
         vars_str = ", ".join(iter_vars) if iter_vars else "k, v"
-        lines.append(f"{ind}for {vars_str} in {iter_name} do")
+        lines.append(f"{ind}for {vars_str} in {iter_expr_str} do")
 
         # Mark header as emitted
         self._emitted.add(header.id)
 
-        # Emit body blocks — skip FORGLOOP header and FORGPREP setup
+        # Emit body blocks
         body_blocks = sorted(loop.body - {loop.header})
         for bid in body_blocks:
             if bid in self._emitted:
@@ -1420,17 +1465,16 @@ class SourceEmitter:
         else:
             lines.extend(self._emit_block_stmts(block, indent))
 
-    def _emit_block_body_only(self, block: BasicBlock, indent: int) -> List[str]:
-        """Emit non-terminator instructions of a block.
+    def _fold_block_body_stmts(self, block: BasicBlock) -> List[Stmt]:
+        """Get folded AST statements for a block body (minus terminator).
 
-        Skips the last instruction if it's a jump/branch (handled by structure).
+        Same logic as _emit_block_body_only but returns Stmt nodes
+        instead of formatted strings.
         """
-        # Determine if last instruction is a terminator
         last_inst = self.code[block.end_pc]
         last_opc = get_opcode(last_inst)
         last_name = self.opcode_to_name.get(last_opc, "")
 
-        # For blocks whose terminator is a jump/branch, skip the terminator
         skip_terminator = last_name in CONDITIONAL_JUMPS or last_name in (
             "JUMP", "JUMPBACK", "JUMPX", "FORNPREP", "FORNLOOP",
             "FORGPREP", "FORGPREP_INEXT", "FORGPREP_NEXT", "FORGLOOP",
@@ -1443,6 +1487,14 @@ class SourceEmitter:
         stmts = self._collect_block_stmts(block.start_pc, end_pc)
         stmts = fold_expressions(stmts, self.lifter.names._debug_names)
         stmts = fold_table_constructors(stmts)
+        return stmts
+
+    def _emit_block_body_only(self, block: BasicBlock, indent: int) -> List[str]:
+        """Emit non-terminator instructions of a block.
+
+        Skips the last instruction if it's a jump/branch (handled by structure).
+        """
+        stmts = self._fold_block_body_stmts(block)
         lines: List[str] = []
         for stmt in stmts:
             stmt_str = self._stmt_to_str(stmt, indent)
