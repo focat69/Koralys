@@ -1177,53 +1177,75 @@ class SourceEmitter:
           Setup block (FORNPREP):  R[A]=limit, R[A+1]=step, R[A+2]=init
           Header block (FORNLOOP): the self-loop that increments and checks
 
-        We find the FORNPREP setup block (predecessor), extract A, and build
-        the for header from the setup assignments.
+        We find the FORNPREP setup block (predecessor), extract A, and
+        absorb the init/limit/step expressions into the for header.
         """
         ind = self._indent(indent)
         header = self.cfg.get_block(loop.header)
         lines: List[str] = []
 
-        # Find the FORNPREP setup block to get register A and initial values
         setup_bid = self._for_setup_blocks.get(loop.header)
         if setup_bid is not None:
             setup_block = self.cfg.get_block(setup_bid)
             setup_inst = self.code[setup_block.end_pc]
             A = get_arg_a(setup_inst)
             fornprep_pc = setup_block.end_pc
-
-            # Emit any non-for-setup instructions from the setup block.
-            # The last 3 assignments before FORNPREP are limit, step, init —
-            # we want to extract those values for the for header.
-            # For now, emit the setup block body (non-terminator) and extract
-            # variable names from the FORNPREP's register A.
-            setup_stmts = self._emit_block_body_only(setup_block, indent)
-            lines.extend(setup_stmts)
             self._emitted.add(setup_bid)
         else:
-            # Fallback: read A from the header's terminator (FORNLOOP)
             inst = self.code[header.end_pc]
             A = get_arg_a(inst)
             fornprep_pc = header.end_pc
 
-        # Build for header: for <var> = <init>, <limit>, <step> do
-        # R[A] = limit, R[A+1] = step, R[A+2] = loop variable
+        # R[A] = limit, R[A+1] = step, R[A+2] = loop variable / init
         var_name = self.lifter.names.get_name(A + 2, 0, fornprep_pc)
-        limit_name = self.lifter._var(A, fornprep_pc).name
-        step_name = self.lifter._var(A + 1, fornprep_pc).name
-        init_name = self.lifter._var(A + 2, fornprep_pc).name
+        limit_var = self.lifter._var(A, fornprep_pc).name
+        step_var = self.lifter._var(A + 1, fornprep_pc).name
+        init_var = self.lifter._var(A + 2, fornprep_pc).name
 
-        lines.append(f"{ind}for {var_name} = {init_name}, {limit_name}, {step_name} do")
+        # Default: use variable names (old behavior)
+        init_str = init_var
+        limit_str = limit_var
+        step_str = step_var
+
+        # Try to absorb the setup expressions into the for header
+        if setup_bid is not None:
+            setup_stmts = self._fold_block_body_stmts(setup_block)
+            control_names = {limit_var, step_var, init_var}
+            absorbed = set()
+
+            # Map variable name -> its defining expression
+            def_exprs: Dict[str, Expr] = {}
+            for si, s in enumerate(setup_stmts):
+                if isinstance(s, LocalDecl) and len(s.names) == 1 and s.names[0] in control_names:
+                    if s.exprs:
+                        def_exprs[s.names[0]] = s.exprs[0]
+                        absorbed.add(si)
+
+            if init_var in def_exprs:
+                init_str = self._expr_to_str(def_exprs[init_var])
+            if limit_var in def_exprs:
+                limit_str = self._expr_to_str(def_exprs[limit_var])
+            if step_var in def_exprs:
+                step_str = self._expr_to_str(def_exprs[step_var])
+
+            # Emit any remaining setup statements that weren't absorbed
+            for si, s in enumerate(setup_stmts):
+                if si not in absorbed:
+                    stmt_str = self._stmt_to_str(s, indent)
+                    if stmt_str:
+                        lines.append(stmt_str)
+
+        # Omit step if it's 1 (the default)
+        if step_str == "1":
+            lines.append(f"{ind}for {var_name} = {init_str}, {limit_str} do")
+        else:
+            lines.append(f"{ind}for {var_name} = {init_str}, {limit_str}, {step_str} do")
 
         self._emitted.add(header.id)
 
-        # Emit header's non-terminator instructions as the loop body.
-        # For self-loops (header == latch), the body code is inside the header
-        # block before the FORNLOOP terminator.
         header_body = self._emit_block_body_only(header, indent + 1)
         lines.extend(header_body)
 
-        # Emit additional body blocks (for multi-block loop bodies)
         body_blocks = sorted(loop.body - {loop.header})
         for bid in body_blocks:
             if bid in self._emitted:
