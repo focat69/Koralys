@@ -865,6 +865,31 @@ def fold_expressions(stmts: List[Stmt], preserve: Optional[Set[str]] = None) -> 
     return stmts
 
 
+def fold_reassignments(stmts: List[Stmt], debug_names: Set[str]) -> List[Stmt]:
+    """Convert repeated LocalDecl for the same debug-named variable into Assign.
+
+    SSA gives every write a new version, so the lifter emits LocalDecl for
+    each one. When the variable has a debug name (meaning the source code
+    declared it once), only the first occurrence should be `local x = ...`;
+    subsequent writes become `x = ...`.
+    """
+    seen: Set[str] = set()
+    result: List[Stmt] = []
+    for stmt in stmts:
+        if isinstance(stmt, LocalDecl) and len(stmt.names) == 1:
+            vname = stmt.names[0]
+            if vname in debug_names and vname in seen:
+                result.append(Assign(
+                    targets=[VarRef(name=vname, register=-1, ssa_version=-1)],
+                    exprs=stmt.exprs,
+                ))
+                continue
+            if vname in debug_names:
+                seen.add(vname)
+        result.append(stmt)
+    return result
+
+
 def _is_table_assign(stmt: Stmt, table_name: str) -> Optional[tuple]:
     """Check if stmt is an assignment to table_name[key] or table_name.field.
 
@@ -1130,6 +1155,7 @@ class SourceEmitter:
         stmts = self._collect_block_stmts(block.start_pc, block.end_pc)
         stmts = fold_expressions(stmts, self.lifter.names._debug_names)
         stmts = fold_table_constructors(stmts)
+        stmts = fold_reassignments(stmts, self.lifter.names._debug_names)
         lines: List[str] = []
         for stmt in stmts:
             stmt_str = self._stmt_to_str(stmt, indent)
@@ -1547,6 +1573,7 @@ class SourceEmitter:
         stmts = self._collect_block_stmts(block.start_pc, end_pc)
         stmts = fold_expressions(stmts, self.lifter.names._debug_names)
         stmts = fold_table_constructors(stmts)
+        stmts = fold_reassignments(stmts, self.lifter.names._debug_names)
         return stmts
 
     def _emit_block_body_only(self, block: BasicBlock, indent: int) -> List[str]:
