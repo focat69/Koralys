@@ -846,8 +846,14 @@ def fold_expressions(stmts: List[Stmt], preserve: Optional[Set[str]] = None) -> 
             for j in range(def_idx + 1, len(stmts)):
                 use_stmt = stmts[j]
                 if vname in _stmt_refs(use_stmt):
-                    # Inline: replace vname with def_expr in use_stmt
-                    stmts[j] = _substitute_in_stmt(use_stmt, vname, def_expr)
+                    # Re-read the expr from the current statement since an
+                    # earlier inline in this pass may have modified it.
+                    current_def = stmts[def_idx]
+                    if isinstance(current_def, LocalDecl) and len(current_def.exprs) == 1:
+                        actual_expr = current_def.exprs[0]
+                    else:
+                        actual_expr = def_expr
+                    stmts[j] = _substitute_in_stmt(use_stmt, vname, actual_expr)
                     to_remove.add(def_idx)
                     changed = True
                     break
