@@ -144,6 +144,14 @@ class NameResolver:
                 return var["name"]
         return None
 
+    def debug_name_at(self, reg: int, pc: int) -> Optional[str]:
+        """Look up a debug name for a register at a specific PC, bypassing the cache.
+
+        Useful for for-loop variables where the same register has different
+        names in different loops.
+        """
+        return self._debug_name(reg, pc)
+
     def has_debug_name(self, name: str) -> bool:
         return name in self._debug_names
 
@@ -940,6 +948,8 @@ class SourceEmitter:
         lifter: InstructionLifter,
         proto: Dict[str, Any],
         luau_version: int,
+        proto_table: Optional[List[Dict[str, Any]]] = None,
+        string_table: Optional[List[str]] = None,
     ):
         self.cfg = cfg
         self.dtree = dtree
@@ -948,6 +958,8 @@ class SourceEmitter:
         self.lifter = lifter
         self.proto = proto
         self.luau_version = luau_version
+        self.proto_table = proto_table or []
+        self.string_table = string_table or []
 
         OP_TABLE = get_op_table(luau_version)
         self.opcode_to_name = {info.number: info.name for info in OP_TABLE}
@@ -1197,7 +1209,14 @@ class SourceEmitter:
             fornprep_pc = header.end_pc
 
         # R[A] = limit, R[A+1] = step, R[A+2] = loop variable / init
-        var_name = self.lifter.names.get_name(A + 2, 0, fornprep_pc)
+        # Use the first body instruction PC for debug name lookup, since
+        # the loop variable's debug range starts inside the body, not at
+        # FORNPREP. Also bypass the name cache because the same register
+        # can have different names across different for-loops.
+        body_pc = header.start_pc
+        var_name = self.lifter.names.debug_name_at(A + 2, body_pc)
+        if var_name is None:
+            var_name = self.lifter.names.get_name(A + 2, 0, fornprep_pc)
         limit_var = self.lifter._var(A, fornprep_pc).name
         step_var = self.lifter._var(A + 1, fornprep_pc).name
         init_var = self.lifter._var(A + 2, fornprep_pc).name
@@ -1288,14 +1307,27 @@ class SourceEmitter:
         forgloop_aux = self.code[forgloop_pc + 1] if forgloop_pc + 1 < len(self.code) else None
 
         # Build iteration variable names from R[A+3..A+3+nresults-1]
+        # Use the first body block's start PC for debug name lookup. The
+        # FORGLOOP PC sits at the endpc boundary of the debug range, so
+        # the lookup would miss. The body start PC is inside the range.
         if forgloop_aux is not None:
             nresults = forgloop_aux & 0xFF
         else:
             nresults = 2  # Default: key, value
+
+        body_blocks_sorted = sorted(loop.body - {loop.header})
+        if body_blocks_sorted:
+            body_pc = self.cfg.get_block(body_blocks_sorted[0]).start_pc
+        else:
+            body_pc = header.start_pc
+
         iter_vars = []
         for r in range(forgloop_A + 3, forgloop_A + 3 + nresults):
-            vname = self.lifter.names.get_name(r, 0, forgloop_pc)
-            iter_vars.append(vname)
+            dname = self.lifter.names.debug_name_at(r, body_pc)
+            if dname is not None:
+                iter_vars.append(dname)
+            else:
+                iter_vars.append(self.lifter.names.get_name(r, 0, forgloop_pc))
 
         # Find the FORGPREP setup block and absorb the iterator expression
         # into the for header instead of emitting it as separate statements.
@@ -1611,6 +1643,20 @@ class SourceEmitter:
         elif isinstance(expr, ClosureExpr):
             if expr.source:
                 return expr.source
+            # Resolve child proto via pTable and recursively decompile
+            p_table = self.proto.get("pTable", [])
+            if self.proto_table and expr.proto_index < len(p_table):
+                child_idx = p_table[expr.proto_index]
+                if child_idx < len(self.proto_table):
+                    child_proto = self.proto_table[child_idx]
+                    child_src = decompile_proto(
+                        child_proto,
+                        self.luau_version,
+                        self.string_table,
+                        self.proto_table,
+                        depth=1,
+                    )
+                    return child_src
             return f"function() --[[ proto {expr.proto_index} ]] end"
 
         elif isinstance(expr, FunctionExpr):
@@ -1621,6 +1667,28 @@ class SourceEmitter:
 
         return str(expr)
 
+    def _reindent(self, text: str, indent: int) -> str:
+        """Re-indent a multi-line string (from a child proto) to match parent context.
+
+        The child source comes back indented from column 0, e.g.:
+            function(a, b)
+                return a + b
+            end
+        We prepend the parent indent to each line after the first, preserving
+        the child's own relative indentation.
+        """
+        lines = text.split("\n")
+        if len(lines) <= 1:
+            return text
+        ind = self._indent(indent)
+        result = [lines[0]]
+        for line in lines[1:]:
+            if line.strip():
+                result.append(f"{ind}{line}")
+            else:
+                result.append("")
+        return "\n".join(result)
+
     def _stmt_to_str(self, stmt: Stmt, indent: int) -> str:
         """Convert a statement to an indented Luau source string."""
         ind = self._indent(indent)
@@ -1629,13 +1697,19 @@ class SourceEmitter:
             names_str = ", ".join(stmt.names)
             if stmt.exprs:
                 exprs_str = ", ".join(self._expr_to_str(e) for e in stmt.exprs)
-                return f"{ind}local {names_str} = {exprs_str}"
+                result = f"{ind}local {names_str} = {exprs_str}"
+                if "\n" in result:
+                    return self._reindent(result, indent)
+                return result
             return f"{ind}local {names_str}"
 
         elif isinstance(stmt, Assign):
             targets_str = ", ".join(self._expr_to_str(t) for t in stmt.targets)
             exprs_str = ", ".join(self._expr_to_str(e) for e in stmt.exprs)
-            return f"{ind}{targets_str} = {exprs_str}"
+            result = f"{ind}{targets_str} = {exprs_str}"
+            if "\n" in result:
+                return self._reindent(result, indent)
+            return result
 
         elif isinstance(stmt, FunctionCallStmt):
             return f"{ind}{self._expr_to_str(stmt.call)}"
@@ -1714,7 +1788,8 @@ def decompile_proto(
 
     # Build source emitter
     emitter = SourceEmitter(
-        cfg, dtree, structures, ssa, lifter, proto, luau_version
+        cfg, dtree, structures, ssa, lifter, proto, luau_version,
+        proto_table=proto_table, string_table=string_table,
     )
 
     return emitter.emit()
