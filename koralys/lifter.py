@@ -890,6 +890,24 @@ def fold_reassignments(stmts: List[Stmt], debug_names: Set[str]) -> List[Stmt]:
     return result
 
 
+def negate_condition(cond: Expr) -> Expr:
+    """Negate a condition expression, preferring operator flips over wrapping with `not`.
+
+    For comparisons, flip the operator directly (e.g. `>` becomes `<=`).
+    For `not x`, unwrap to `x`.
+    For everything else, wrap with `not`.
+    """
+    _NEGATE_OP = {
+        "<": ">=", "<=": ">", ">": "<=", ">=": "<",
+        "==": "~=", "~=": "==",
+    }
+    if isinstance(cond, BinOp) and cond.op in _NEGATE_OP:
+        return BinOp(op=_NEGATE_OP[cond.op], left=cond.left, right=cond.right)
+    if isinstance(cond, UnOp) and cond.op == "not ":
+        return cond.operand
+    return UnOp(op="not ", operand=cond)
+
+
 def fold_cond_expr(
     stmts: List[Stmt],
     cond: Expr,
@@ -1508,8 +1526,10 @@ class SourceEmitter:
         latch = self.cfg.get_block(loop.latch)
         header = self.cfg.get_block(loop.header)
 
-        # Get condition and fold temporaries into it
+        # lift_condition returns the fall-through (continue looping) condition.
+        # For repeat-until we need the exit condition, so negate it.
         cond_expr = self.lifter.lift_condition(header.end_pc)
+        cond_expr = negate_condition(cond_expr)
         self._emitted.add(header.id)
         body_stmts = self._fold_block_body_stmts(header)
         body_stmts, cond_expr = fold_cond_expr(
