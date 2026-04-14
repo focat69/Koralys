@@ -890,6 +890,57 @@ def fold_reassignments(stmts: List[Stmt], debug_names: Set[str]) -> List[Stmt]:
     return result
 
 
+def fold_cond_expr(
+    stmts: List[Stmt],
+    cond: Expr,
+    preserve: Optional[Set[str]] = None,
+) -> Tuple[List[Stmt], Expr]:
+    """Fold single-use temporaries from a condition block's body into the condition expression.
+
+    Returns the pruned statement list and the updated condition.
+    """
+    cond_refs = _collect_refs(cond)
+
+    # Count how many times each var is referenced across all stmts + the condition
+    use_counts: Dict[str, int] = defaultdict(int)
+    for r in cond_refs:
+        use_counts[r] += 1
+    for stmt in stmts:
+        for r in _stmt_refs(stmt):
+            use_counts[r] += 1
+
+    to_remove: Set[int] = set()
+    for i in range(len(stmts) - 1, -1, -1):
+        stmt = stmts[i]
+        if not isinstance(stmt, LocalDecl):
+            continue
+        if len(stmt.names) != 1 or len(stmt.exprs) != 1:
+            continue
+        vname = stmt.names[0]
+        if preserve and vname in preserve:
+            continue
+        if use_counts.get(vname, 0) != 1:
+            continue
+        if vname not in cond_refs:
+            continue
+        cond = _substitute(cond, vname, stmt.exprs[0])
+        cond_refs = _collect_refs(cond)
+        to_remove.add(i)
+
+    if to_remove:
+        stmts = [s for i, s in enumerate(stmts) if i not in to_remove]
+
+    # Normalize: if comparison has a literal on the left, flip it.
+    # e.g. 2 < c  ->  c > 2
+    _FLIP_OP = {"<": ">", "<=": ">=", ">": "<", ">=": "<="}
+    if isinstance(cond, BinOp) and cond.op in _FLIP_OP:
+        if isinstance(cond.left, (NumberLit, StringLit, BoolLit, NilLit)):
+            if not isinstance(cond.right, (NumberLit, StringLit, BoolLit, NilLit)):
+                cond = BinOp(op=_FLIP_OP[cond.op], left=cond.right, right=cond.left)
+
+    return stmts, cond
+
+
 def _is_table_assign(stmt: Stmt, table_name: str) -> Optional[tuple]:
     """Check if stmt is an assignment to table_name[key] or table_name.field.
 
@@ -1184,16 +1235,22 @@ class SourceEmitter:
         ind = self._indent(indent)
         header = self.cfg.get_block(loop.header)
 
-        # Get condition from the header's terminator
+        # Get condition and fold temporaries into it
         cond_expr = self.lifter.lift_condition(header.end_pc)
+        self._emitted.add(header.id)
+        body_stmts = self._fold_block_body_stmts(header)
+        body_stmts, cond_expr = fold_cond_expr(
+            body_stmts, cond_expr, self.lifter.names._debug_names
+        )
         cond_str = self._expr_to_str(cond_expr)
 
         lines = [f"{ind}while {cond_str} do"]
 
-        # Emit header non-terminator instructions
-        self._emitted.add(header.id)
-        header_stmts = self._emit_block_body_only(header, indent + 1)
-        lines.extend(header_stmts)
+        # Emit remaining header body instructions
+        for stmt in body_stmts:
+            stmt_str = self._stmt_to_str(stmt, indent + 1)
+            if stmt_str:
+                lines.append(stmt_str)
 
         # Emit body blocks (excluding header and latch)
         body_blocks = sorted(loop.body - {loop.header})
@@ -1451,16 +1508,22 @@ class SourceEmitter:
         latch = self.cfg.get_block(loop.latch)
         header = self.cfg.get_block(loop.header)
 
-        # Get condition from header terminator (for repeat-until, condition is at end of header)
+        # Get condition and fold temporaries into it
         cond_expr = self.lifter.lift_condition(header.end_pc)
+        self._emitted.add(header.id)
+        body_stmts = self._fold_block_body_stmts(header)
+        body_stmts, cond_expr = fold_cond_expr(
+            body_stmts, cond_expr, self.lifter.names._debug_names
+        )
         cond_str = self._expr_to_str(cond_expr)
 
         lines = [f"{ind}repeat"]
 
         # Emit header body (minus terminator)
-        self._emitted.add(header.id)
-        header_stmts = self._emit_block_body_only(header, indent + 1)
-        lines.extend(header_stmts)
+        for stmt in body_stmts:
+            stmt_str = self._stmt_to_str(stmt, indent + 1)
+            if stmt_str:
+                lines.append(stmt_str)
 
         # Emit other body blocks
         body_blocks = sorted(loop.body - {loop.header, loop.latch})
@@ -1488,12 +1551,19 @@ class SourceEmitter:
         # --- First 'if' ---
         cond_block = self.cfg.get_block(if_info.condition)
         cond_expr = self.lifter.lift_condition(cond_block.end_pc)
+
+        # Get body stmts as AST, fold temporaries into the condition
+        self._emitted.add(cond_block.id)
+        body_stmts = self._fold_block_body_stmts(cond_block)
+        body_stmts, cond_expr = fold_cond_expr(
+            body_stmts, cond_expr, self.lifter.names._debug_names
+        )
         cond_str = self._expr_to_str(cond_expr)
 
-        # Emit condition block's non-terminator instructions (setup code)
-        self._emitted.add(cond_block.id)
-        cond_stmts = self._emit_block_body_only(cond_block, indent)
-        lines.extend(cond_stmts)
+        for stmt in body_stmts:
+            stmt_str = self._stmt_to_str(stmt, indent)
+            if stmt_str:
+                lines.append(stmt_str)
 
         lines.append(f"{ind}if {cond_str} then")
 
@@ -1512,12 +1582,18 @@ class SourceEmitter:
                 nested = self._if_map[fb]
                 nested_cond_block = self.cfg.get_block(nested.condition)
                 nested_cond = self.lifter.lift_condition(nested_cond_block.end_pc)
-                nested_cond_str = self._expr_to_str(nested_cond)
 
                 self._emitted.add(nested.condition)
-                # Emit nested condition block's non-terminator instructions
-                nested_stmts = self._emit_block_body_only(nested_cond_block, indent)
-                lines.extend(nested_stmts)
+                nested_body = self._fold_block_body_stmts(nested_cond_block)
+                nested_body, nested_cond = fold_cond_expr(
+                    nested_body, nested_cond, self.lifter.names._debug_names
+                )
+                nested_cond_str = self._expr_to_str(nested_cond)
+
+                for stmt in nested_body:
+                    stmt_str = self._stmt_to_str(stmt, indent)
+                    if stmt_str:
+                        lines.append(stmt_str)
 
                 lines.append(f"{ind}elseif {nested_cond_str} then")
 
