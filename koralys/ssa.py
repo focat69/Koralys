@@ -498,8 +498,11 @@ def _rename_variables(
         )
         return ver
 
-    def rename_block(block_id: int):
-        """Process a single block during SSA renaming."""
+    def _process_block_enter(block_id: int) -> Dict[int, int]:
+        """Process a single block during SSA renaming (enter phase).
+
+        Returns push_counts so the leave phase can pop the stacks.
+        """
         block = cfg.get_block(block_id)
 
         # Track how many versions we pushed (to pop later)
@@ -558,17 +561,29 @@ def _rename_variables(
                 ver = current_version(phi.register)
                 phi.operands[block_id] = ver
 
-        # --- 4. Recurse into dominator tree children ---
-        for child_id in sorted(dtree.children.get(block_id, [])):
-            rename_block(child_id)
+        return push_counts
 
-        # --- 5. Pop version stacks ---
-        for reg, count in push_counts.items():
-            for _ in range(count):
-                stack[reg].pop()
-
-    # Start renaming from entry block
-    rename_block(cfg.entry_id)
+    # Iterative dominator-tree walk using an explicit stack.
+    # Each frame is either an "enter" marker (process the block) or a
+    # "leave" marker (pop the version stacks). This replaces the recursive
+    # rename_block so we can handle CFGs with thousands of blocks.
+    work_stack: list = [("enter", cfg.entry_id)]
+    while work_stack:
+        action, payload = work_stack.pop()
+        if action == "leave":
+            # payload is push_counts dict
+            push_counts = payload
+            for reg, count in push_counts.items():
+                for _ in range(count):
+                    stack[reg].pop()
+        else:
+            block_id = payload
+            push_counts = _process_block_enter(block_id)
+            # Schedule the leave (pop) after all children are done
+            work_stack.append(("leave", push_counts))
+            # Schedule children in reverse order so they process in sorted order
+            for child_id in reversed(sorted(dtree.children.get(block_id, []))):
+                work_stack.append(("enter", child_id))
 
     version_count = dict(counter)
 
