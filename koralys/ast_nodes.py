@@ -186,6 +186,7 @@ class ClosureExpr(Expr):
     """Placeholder for a child proto closure — resolved during emission."""
     proto_index: int
     source: Optional[str] = None  # Decompiled source of the child proto
+    upvalue_names: Optional[List[str]] = None  # Inferred from parent CAPTURE instructions
 
 
 # ---------------------------------------------------------------------------

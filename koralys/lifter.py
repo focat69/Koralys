@@ -104,10 +104,11 @@ def _resolve_import(proto: Dict[str, Any], string_table: List[str], ids: int) ->
 class NameResolver:
     """Resolves register numbers to variable names using debug info and SSA."""
 
-    def __init__(self, proto: Dict[str, Any], ssa: SSAForm):
+    def __init__(self, proto: Dict[str, Any], ssa: SSAForm, upvalue_names: Optional[List[str]] = None):
         self.proto = proto
         self.ssa = ssa
         self.debug_info = proto.get("debugInfo")
+        self._upvalue_names = upvalue_names
         # Track which SSA versions have been declared as locals
         self.declared: Set[Tuple[int, int]] = set()
         # Auto-increment for unnamed variables
@@ -157,9 +158,11 @@ class NameResolver:
         return name in self._debug_names
 
     def get_upvalue_name(self, idx: int) -> str:
-        """Get upvalue name from debug info."""
+        """Get upvalue name from debug info, or from parent-inferred names."""
         if self.debug_info and idx < len(self.debug_info.get("upvalueInfo", [])):
             return self.debug_info["upvalueInfo"][idx]
+        if self._upvalue_names and idx < len(self._upvalue_names):
+            return self._upvalue_names[idx]
         return f"upval{idx}"
 
     def get_param_names(self) -> List[str]:
@@ -541,9 +544,10 @@ class InstructionLifter:
         elif name == "NEWCLOSURE":
             # NEWCLOSURE: Bx is a direct pTable index
             proto_idx = Bx
+            upval_names = self._collect_capture_names(pc)
             return [LocalDecl(
                 names=[self._var(A, pc, is_def=True).name],
-                exprs=[ClosureExpr(proto_index=proto_idx)]
+                exprs=[ClosureExpr(proto_index=proto_idx, upvalue_names=upval_names or None)]
             )]
 
         elif name == "DUPCLOSURE":
@@ -553,9 +557,10 @@ class InstructionLifter:
                 proto_idx = k_entry["value"]
             else:
                 proto_idx = Bx  # fallback
+            upval_names = self._collect_capture_names(pc)
             return [LocalDecl(
                 names=[self._var(A, pc, is_def=True).name],
-                exprs=[ClosureExpr(proto_index=proto_idx)]
+                exprs=[ClosureExpr(proto_index=proto_idx, upvalue_names=upval_names or None)]
             )]
 
         # --- NAMECALL ---
@@ -617,6 +622,44 @@ class InstructionLifter:
         # --- Unknown ---
         else:
             return [CommentStmt(text=f"UNKNOWN opcode: {name}")]
+
+    def _collect_capture_names(self, closure_pc: int) -> List[str]:
+        """Scan forward from a NEWCLOSURE/DUPCLOSURE for CAPTURE instructions.
+
+        Each CAPTURE tells us what the parent captured for the child closure.
+        CAPTURE type 0 (VAL) or 1 (REF): B is a parent register index.
+        CAPTURE type 2 (UPVAL): B is a parent upvalue index.
+        We resolve each to a name so the child can use real variable names.
+        """
+        names = []
+        pc = closure_pc + 1
+        # NEWCLOSURE/DUPCLOSURE may have an aux word; skip it if the opcode uses aux
+        inst = self.code[closure_pc]
+        opc = get_opcode(inst)
+        op_name = self.opcode_to_name.get(opc, "")
+        if op_name in self.aux_opcodes and pc < len(self.code):
+            pc += 1
+
+        while pc < len(self.code):
+            inst = self.code[pc]
+            opc = get_opcode(inst)
+            op_name = self.opcode_to_name.get(opc, "")
+            if op_name != "CAPTURE":
+                break
+            cap_type = get_arg_a(inst)
+            cap_val = get_arg_b(inst)
+            if cap_type in (0, 1):
+                # VAL or REF: B is a register in the parent
+                name = self.names.get_name(cap_val, 0, closure_pc)
+                names.append(name)
+            elif cap_type == 2:
+                # UPVAL: B is an upvalue index in the parent
+                name = self.names.get_upvalue_name(cap_val)
+                names.append(name)
+            else:
+                names.append(f"upval{len(names)}")
+            pc += 1
+        return names
 
     def lift_condition(self, pc: int) -> Expr:
         """Lift a conditional jump instruction into a condition expression.
@@ -1821,6 +1864,7 @@ class SourceEmitter:
                         self.string_table,
                         self.proto_table,
                         depth=1,
+                        upvalue_names=expr.upvalue_names,
                     )
                     return child_src
             return f"function() --[[ proto {expr.proto_index} ]] end"
@@ -1919,6 +1963,7 @@ def decompile_proto(
     string_table: List[str],
     proto_table: List[Dict[str, Any]],
     depth: int = 0,
+    upvalue_names: Optional[List[str]] = None,
 ) -> str:
     """Decompile a single proto into Luau source code.
 
@@ -1960,7 +2005,7 @@ def decompile_proto(
         ssa = build_ssa(cfg, dtree, proto, luau_version)
 
         # Build name resolver and instruction lifter
-        names = NameResolver(proto, ssa)
+        names = NameResolver(proto, ssa, upvalue_names=upvalue_names)
         lifter = InstructionLifter(proto, luau_version, ssa, names, string_table)
 
         # Build source emitter
