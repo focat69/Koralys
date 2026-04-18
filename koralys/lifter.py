@@ -13,6 +13,7 @@ This is the final step in the decompilation pipeline:
   bytecode -> deserialize -> CFG -> dominators -> structures -> SSA -> lifter -> source
 """
 
+import sys
 from typing import Dict, List, Set, Optional, Any, Tuple
 from collections import defaultdict
 
@@ -1907,21 +1908,34 @@ def decompile_proto(
 
     # Build analysis
     cfg = build_cfg(proto, luau_version)
-    dtree = build_dominator_tree(cfg)
-    structures = identify_structures(cfg, dtree, proto, luau_version)
-    ssa = build_ssa(cfg, dtree, proto, luau_version)
 
-    # Build name resolver and instruction lifter
-    names = NameResolver(proto, ssa)
-    lifter = InstructionLifter(proto, luau_version, ssa, names, string_table)
+    # Large protos can have thousands of blocks; the emitter walks them
+    # recursively (nested if/region/loop calls). Bump the recursion limit
+    # so we don't crash on big bytecode, then restore it afterwards.
+    num_blocks = len(cfg.blocks)
+    old_limit = sys.getrecursionlimit()
+    needed = max(old_limit, num_blocks * 4 + 1000)
+    if needed > old_limit:
+        sys.setrecursionlimit(needed)
 
-    # Build source emitter
-    emitter = SourceEmitter(
-        cfg, dtree, structures, ssa, lifter, proto, luau_version,
-        proto_table=proto_table, string_table=string_table,
-    )
+    try:
+        dtree = build_dominator_tree(cfg)
+        structures = identify_structures(cfg, dtree, proto, luau_version)
+        ssa = build_ssa(cfg, dtree, proto, luau_version)
 
-    return emitter.emit()
+        # Build name resolver and instruction lifter
+        names = NameResolver(proto, ssa)
+        lifter = InstructionLifter(proto, luau_version, ssa, names, string_table)
+
+        # Build source emitter
+        emitter = SourceEmitter(
+            cfg, dtree, structures, ssa, lifter, proto, luau_version,
+            proto_table=proto_table, string_table=string_table,
+        )
+
+        return emitter.emit()
+    finally:
+        sys.setrecursionlimit(old_limit)
 
 
 def decompile_all(
