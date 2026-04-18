@@ -538,8 +538,21 @@ class InstructionLifter:
             return stmts
 
         # --- Closures ---
-        elif name == "NEWCLOSURE" or name == "DUPCLOSURE":
+        elif name == "NEWCLOSURE":
+            # NEWCLOSURE: Bx is a direct pTable index
             proto_idx = Bx
+            return [LocalDecl(
+                names=[self._var(A, pc, is_def=True).name],
+                exprs=[ClosureExpr(proto_index=proto_idx)]
+            )]
+
+        elif name == "DUPCLOSURE":
+            # DUPCLOSURE: Bx is a kTable index; the entry (type=6) holds the pTable index
+            k_entry = self.proto.get("kTable", [])[Bx] if Bx < len(self.proto.get("kTable", [])) else None
+            if k_entry and k_entry.get("type") == 6:
+                proto_idx = k_entry["value"]
+            else:
+                proto_idx = Bx  # fallback
             return [LocalDecl(
                 names=[self._var(A, pc, is_def=True).name],
                 exprs=[ClosureExpr(proto_index=proto_idx)]
