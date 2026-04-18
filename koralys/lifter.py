@@ -198,6 +198,9 @@ class InstructionLifter:
         self.opcode_to_name = {info.number: info.name for info in OP_TABLE}
         self.aux_opcodes = {info.name for info in OP_TABLE if info.get("aux", False)}
 
+        # Filled by NAMECALL, consumed by the next CALL
+        self._pending_namecall: Optional[tuple] = None  # (obj_expr, method_name)
+
     def _var(self, reg: int, pc: int, is_def: bool = False) -> VarRef:
         """Create a VarRef for a register at a given PC."""
         # Look up SSA version
@@ -442,20 +445,40 @@ class InstructionLifter:
 
         # --- Call ---
         elif name == "CALL":
-            func_var = self._var(A, pc)
-            args: List[Expr] = []
-            if B == 0:
-                args = [VarRef(name="...", register=-1)]  # vararg
-            elif B > 1:
-                args = [self._var(r, pc) for r in range(A + 1, A + B)]
+            # Check if this CALL was set up by a preceding NAMECALL
+            nc = self._pending_namecall
+            self._pending_namecall = None
 
-            call_expr = FunctionCallExpr(
-                func=func_var, args=args,
-                is_vararg_return=(C == 0)
-            )
+            if nc is not None:
+                obj_expr, method_name = nc
+                # NAMECALL: R[A+1] = self, args start at R[A+2]
+                args: List[Expr] = []
+                if B == 0:
+                    args = [VarRef(name="...", register=-1)]
+                elif B > 2:
+                    args = [self._var(r, pc) for r in range(A + 2, A + B)]
+
+                call_expr: Expr = MethodCallExpr(
+                    obj=obj_expr, method=method_name, args=args,
+                    is_vararg_return=(C == 0)
+                )
+            else:
+                func_var = self._var(A, pc)
+                args = []
+                if B == 0:
+                    args = [VarRef(name="...", register=-1)]
+                elif B > 1:
+                    args = [self._var(r, pc) for r in range(A + 1, A + B)]
+
+                call_expr = FunctionCallExpr(
+                    func=func_var, args=args,
+                    is_vararg_return=(C == 0)
+                )
 
             if C == 1:
-                # No return values — standalone call
+                # No return values -- standalone call
+                if isinstance(call_expr, MethodCallExpr):
+                    return [MethodCallStmt(call=call_expr)]
                 return [FunctionCallStmt(call=call_expr)]
             elif C == 2:
                 # Single return
@@ -525,10 +548,10 @@ class InstructionLifter:
         # --- NAMECALL ---
         elif name == "NAMECALL":
             method_name = self._const_string(aux) if aux is not None else "?"
-            # NAMECALL sets up R[A] = method, R[A+1] = self
-            # The actual call happens at the next CALL instruction.
-            # We emit a comment; the CALL handler will produce the method call.
-            return [CommentStmt(text=f"namecall: {self._var(B, pc).name}:{method_name}")]
+            # NAMECALL sets up R[A] = method, R[A+1] = self.
+            # Stash the object + method so the following CALL can emit obj:method().
+            self._pending_namecall = (self._var(B, pc), method_name)
+            return []
 
         # --- GETVARARGS ---
         elif name == "GETVARARGS":
