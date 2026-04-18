@@ -59,19 +59,34 @@ def _compute_postorder(cfg: CFG) -> List[int]:
 
     Returns a list of block IDs in postorder (deepest-first).
     Unreachable blocks are excluded.
+
+    Uses an explicit stack so large CFGs (thousands of blocks) don't
+    blow Python's call stack.
     """
     visited: Set[int] = set()
     postorder: List[int] = []
 
-    def dfs(block_id: int):
-        visited.add(block_id)
-        block = cfg.get_block(block_id)
-        for succ_id in block.successors:
-            if succ_id not in visited and succ_id in cfg.block_map:
-                dfs(succ_id)
-        postorder.append(block_id)
+    # Stack entries: (block_id, iterator over unvisited successors)
+    visited.add(cfg.entry_id)
+    block = cfg.get_block(cfg.entry_id)
+    succs = [s for s in block.successors if s in cfg.block_map]
+    stack: list = [(cfg.entry_id, iter(succs))]
 
-    dfs(cfg.entry_id)
+    while stack:
+        bid, succ_iter = stack[-1]
+        pushed = False
+        for succ_id in succ_iter:
+            if succ_id not in visited:
+                visited.add(succ_id)
+                child_block = cfg.get_block(succ_id)
+                child_succs = [s for s in child_block.successors if s in cfg.block_map]
+                stack.append((succ_id, iter(child_succs)))
+                pushed = True
+                break
+        if not pushed:
+            stack.pop()
+            postorder.append(bid)
+
     return postorder
 
 
@@ -188,12 +203,13 @@ def domtree_to_text(dtree: DominatorTree, cfg: CFG) -> str:
     lines.append("")
     lines.append("Tree structure:")
 
-    def print_tree(bid: int, indent: int):
-        lines.append(f"{'  ' * indent}BB{bid}")
-        for child in sorted(dtree.children.get(bid, [])):
-            print_tree(child, indent + 1)
-
-    print_tree(cfg.entry_id, 1)
+    # Iterative tree print so large dominator trees don't blow the call stack
+    print_stack = [(cfg.entry_id, 1)]
+    while print_stack:
+        bid, indent_level = print_stack.pop()
+        lines.append(f"{'  ' * indent_level}BB{bid}")
+        for child in reversed(sorted(dtree.children.get(bid, []))):
+            print_stack.append((child, indent_level + 1))
 
     # Print dominance frontiers
     lines.append("")
