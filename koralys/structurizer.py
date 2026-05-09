@@ -309,19 +309,32 @@ def identify_structures(
     """
     # --- Step 1: Find loops ---
     back_edges = _find_back_edges(cfg, dtree)
+
+    from collections import defaultdict as _defaultdict
+    header_to_edges: Dict[int, List[int]] = _defaultdict(list)
+    for latch_id, header_id in back_edges:
+        header_to_edges[header_id].append(latch_id)
+
     loops: List[LoopInfo] = []
     loop_headers: Set[int] = set()
 
-    for latch_id, header_id in back_edges:
-        body = _compute_loop_body(header_id, latch_id, cfg)
+    for header_id, latch_ids in header_to_edges.items():
+        merged_body: Set[int] = set()
+        for lid in latch_ids:
+            merged_body |= _compute_loop_body(header_id, lid, cfg)
+
+        best_latch = max(
+            latch_ids,
+            key=lambda lid: len(_compute_loop_body(header_id, lid, cfg)),
+        )
         loop_type, exit_block = _classify_loop(
-            header_id, latch_id, body, cfg, proto, luau_version
+            header_id, best_latch, merged_body, cfg, proto, luau_version
         )
         loops.append(LoopInfo(
             header=header_id,
-            latch=latch_id,
+            latch=best_latch,
             exit_block=exit_block,
-            body=body,
+            body=merged_body,
             loop_type=loop_type,
         ))
         loop_headers.add(header_id)
