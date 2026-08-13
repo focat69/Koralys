@@ -15,7 +15,7 @@ If you'd like to compile your script, please refer to the `/compile` directory.
 ## Written by:
 - **focat**
   - Discord: @focat (676960182621962271)
-  - GitHub: [focat69](https://github.com/focat69)
+  - GitHub: [focatdev](https://github.com/focatdev)
 - **Jiface**
   - Discord: @cephalocone (1460413830394937477)
   - GitHub: [ssynical](https://github.com/ssynical)
